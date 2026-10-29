@@ -3,6 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Grand Livre">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F5EDE0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1F1612" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="apple-touch-icon.png">
 <title>Grand Livre — Budget &amp; Épargne</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -539,18 +547,24 @@
     </div>
 
     <h2 class="section-title">Exporter en CSV<span class="rule"></span></h2>
-    <p class="hint">Génère un fichier CSV de tes dépenses ou revenus, réutilisable dans Numbers, Excel ou ailleurs.</p>
+    <p class="hint">Génère un fichier CSV lisible dans Numbers, Excel ou Google Sheets. Le CSV sert à échanger avec un tableur ; pour copier toutes tes données d'un appareil à l'autre, utilise plutôt la sauvegarde complète plus bas.</p>
     <div class="card">
+      <label for="csvFormatSel">Format du fichier</label>
+      <select id="csvFormatSel">
+        <option value="fr">Point-virgule et virgule décimale (Numbers et Excel en français)</option>
+        <option value="comma">Virgule et point décimal (Google Sheets, anglais)</option>
+      </select>
       <div class="btn-row">
         <button class="btn outline" id="exportExpBtn" type="button">Exporter les dépenses</button>
         <button class="btn outline" id="exportIncBtn" type="button">Exporter les revenus</button>
+        <button class="btn outline" id="exportSalBtn" type="button">Exporter les versements de salaire</button>
       </div>
     </div>
 
     <h2 class="section-title">Importer un CSV<span class="rule"></span></h2>
-    <p class="hint">Importe un export Numbers ou Excel de tes dépenses. Le séparateur (virgule ou point-virgule) est détecté automatiquement ; tu associeras ensuite tes colonnes aux bons champs. Un montant négatif est importé comme une note de crédit (remboursement).</p>
+    <p class="hint">Importe un fichier de <strong>dépenses</strong>, de <strong>revenus</strong> ou de <strong>versements de salaire</strong> : export de cette app, de Numbers ou d'Excel. L'app retrouve le tableau même s'il est précédé d'un titre ou d'un tableau de résumé, devine le séparateur et le format des montants, te laisse vérifier les colonnes et ignore les lignes déjà présentes. Un montant négatif de dépense est importé comme une note de crédit.</p>
     <div class="card">
-      <input type="file" id="csvFile" accept=".csv,text/csv">
+      <input type="file" id="csvFile" accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel">
     </div>
 
     <h2 class="section-title">Vérifier les dates importées<span class="rule"></span></h2>
@@ -2591,6 +2605,10 @@ function setupSettings(){
   });
   document.getElementById('exportExpBtn').addEventListener('click', exportExpensesCSV);
   document.getElementById('exportIncBtn').addEventListener('click', exportIncomesCSV);
+  document.getElementById('exportSalBtn').addEventListener('click', exportSalaryCSV);
+  const fmtSel = document.getElementById('csvFormatSel');
+  fmtSel.value = csvFormat();
+  fmtSel.addEventListener('change', ()=>{ state.settings.csvFormat = fmtSel.value === 'comma' ? 'comma' : 'fr'; saveState(); toast('Format enregistré.', 'ok'); });
   document.getElementById('exportJsonBtn').addEventListener('click', exportJsonBackup);
   document.getElementById('repairDatesBtn').addEventListener('click', ()=> repairImportedDates(false));
   document.getElementById('auditDatesBtn').addEventListener('click', openDateAuditModal);
@@ -2665,26 +2683,35 @@ async function offerDownload(filename, text){
     else { console.error(e); toast("L'export a échoué.", 'err'); }
   }
 }
+function csvFormat(){ return state.settings.csvFormat === 'comma' ? 'comma' : 'fr'; }
+function csvSep(){ return csvFormat() === 'fr' ? ';' : ','; }
+function csvNum(n){ const s = Number(n).toFixed(2); return csvFormat() === 'fr' ? s.replace('.', ',') : s; }
 function csvEscape(v){
-  const s = String(v===undefined||v===null?'':v);
-  if(/[",;\n]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
+  const s = String(v===undefined||v===null ? '' : v);
+  if(s.indexOf('"') !== -1 || s.indexOf('\n') !== -1 || s.indexOf(csvSep()) !== -1) return '"' + s.replace(/"/g,'""') + '"';
   return s;
 }
+function buildCsv(rows){ const sep = csvSep(); return rows.map(r=> r.map(csvEscape).join(sep)).join('\n'); }
 function exportExpensesCSV(){
   const rows = [['Date','Description','Catégorie','Montant']];
   state.expenses.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>{
-    rows.push([e.date, e.description, catById(e.categoryId).name, e.amount.toFixed(2)]);
+    rows.push([e.date, e.description, catById(e.categoryId).name, csvNum(e.amount)]);
   });
-  const csv = rows.map(r=>r.map(csvEscape).join(',')).join('\n');
-  offerDownload('depenses.csv', csv);
+  offerDownload('depenses.csv', buildCsv(rows));
 }
 function exportIncomesCSV(){
   const rows = [['Année','Date de réception','Source','Fréquence','Montant']];
   state.incomes.slice().sort((a,b)=> incomeSortKey(a).localeCompare(incomeSortKey(b))).forEach(i=>{
-    rows.push([i.year, i.date||'', i.label, i.frequency==='monthly'?'mensuel':(i.frequency==='once'?'une fois':'annuel'), i.amount.toFixed(2)]);
+    rows.push([i.year, i.date||'', i.label, i.frequency==='monthly'?'mensuel':(i.frequency==='once'?'une fois':'annuel'), csvNum(i.amount)]);
   });
-  const csv = rows.map(r=>r.map(csvEscape).join(',')).join('\n');
-  offerDownload('revenus.csv', csv);
+  offerDownload('revenus.csv', buildCsv(rows));
+}
+function exportSalaryCSV(){
+  const rows = [['Date','Montant','Source','Mois du salaire']];
+  state.salaryPayments.slice().sort((a,b)=> a.date.localeCompare(b.date)).forEach(p=>{
+    rows.push([p.date, csvNum(p.amount), p.label||'', salaryMonthOf(p)||'']);
+  });
+  offerDownload('versements-salaire.csv', buildCsv(rows));
 }
 function exportJsonBackup(){
   offerDownload('grand-livre-sauvegarde.json', JSON.stringify(state, null, 2));
@@ -2715,97 +2742,302 @@ function handleJsonFile(file){
   reader.readAsText(file);
 }
 
-/* ---- CSV import with delimiter detection + column mapping ---- */
+/* ---- CSV import: finds the table inside the file, 3 kinds of data, skips lines already present ---- */
+function normKey(s){
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+}
+const IMPORT_SPECS = {
+  expenses:{ label:'Dépenses', fields:[
+    {k:'date',   label:'Date',        req:true, names:['date','date operation','date de l operation','date de valeur','jour']},
+    {k:'desc',   label:'Description', names:['description','libelle','designation','achat','item','intitule','detail','details','objet','communication','nom']},
+    {k:'amount', label:'Montant',     req:true, names:['montant','amount','prix','somme','valeur','debit','total']},
+    {k:'cat',    label:'Catégorie',   names:['categorie','category','rubrique','type']} ]},
+  incomes:{ label:'Revenus', fields:[
+    {k:'date',   label:'Date de réception', names:['date de reception','date','reception','jour']},
+    {k:'desc',   label:'Source',      names:['source','description','libelle','origine','designation','nom']},
+    {k:'amount', label:'Montant',     req:true, names:['montant','amount','somme','valeur','total']},
+    {k:'year',   label:'Année (lignes sans date)', names:['annee','year']},
+    {k:'freq',   label:'Fréquence (lignes sans date)', names:['frequence','periodicite']} ]},
+  salary:{ label:'Versements de salaire', fields:[
+    {k:'date',   label:'Date du versement', req:true, names:['date du versement','date de reception','date','versement','jour']},
+    {k:'amount', label:'Montant',     req:true, names:['montant','amount','somme','valeur','total']},
+    {k:'desc',   label:'Source',      names:['source','description','libelle','employeur','nom']},
+    {k:'month',  label:'Mois du salaire (AAAA-MM)', names:['mois du salaire','mois']} ]}
+};
+
+function splitCount(line, d){
+  let inQ = false, n = 0;
+  for(let i=0; i<line.length; i++){
+    const ch = line[i];
+    if(ch === '"') inQ = !inQ;
+    else if(ch === d && !inQ) n++;
+  }
+  return n;
+}
+// Looks at many lines (not only the first one) : the right separator appears the same number of times on most lines.
+function detectDelimiter(text){
+  const lines = text.split(/\r?\n/).filter(l=> l.trim() !== '').slice(0, 80);
+  let best = ',', bestScore = -1;
+  [';', ',', '\t'].forEach(d=>{
+    const counts = lines.map(l=> splitCount(l, d)).filter(n=> n > 0);
+    if(!counts.length) return;
+    const freq = {};
+    counts.forEach(n=>{ freq[n] = (freq[n]||0) + 1; });
+    const modeN = Object.keys(freq).sort((a,b)=> freq[b]-freq[a] || b-a)[0];
+    const score = freq[modeN] * Number(modeN);
+    if(score > bestScore){ bestScore = score; best = d; }
+  });
+  return best;
+}
+// Keeps empty rows : they separate the tables of a Numbers export.
 function parseCSV(text, delimiter){
   const rows = [];
   let row = [], field = '', inQuotes = false;
-  for(let i=0;i<text.length;i++){
+  for(let i=0; i<text.length; i++){
     const c = text[i];
     if(inQuotes){
-      if(c==='"'){
-        if(text[i+1]==='"'){ field+='"'; i++; } else inQuotes=false;
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; } else inQuotes = false;
       } else field += c;
     } else {
-      if(c==='"') inQuotes = true;
-      else if(c===delimiter){ row.push(field); field=''; }
-      else if(c==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
-      else if(c==='\r'){ /* skip */ }
+      if(c === '"') inQuotes = true;
+      else if(c === delimiter){ row.push(field); field = ''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row = []; field = ''; }
+      else if(c === '\r'){ /* skip */ }
       else field += c;
     }
   }
-  if(field.length>0 || row.length>0){ row.push(field); rows.push(row); }
-  return rows.filter(r => r.length>1 || (r.length===1 && r[0].trim()!==''));
-}
-function detectDelimiter(text){
-  const firstLine = text.split('\n')[0] || '';
-  const counts = {',':(firstLine.match(/,/g)||[]).length, ';':(firstLine.match(/;/g)||[]).length, '\t':(firstLine.match(/\t/g)||[]).length};
-  let best = ',', bestN = -1;
-  Object.keys(counts).forEach(k=>{ if(counts[k]>bestN){ bestN=counts[k]; best=k; } });
-  return bestN>0 ? best : ',';
+  if(field.length > 0 || row.length > 0){ row.push(field); rows.push(row); }
+  while(rows.length && rows[rows.length-1].every(c=> String(c||'').trim() === '')) rows.pop();
+  return rows;
 }
 function parseAmount(raw){
-  if(raw===undefined||raw===null) return NaN;
-  let s = String(raw).trim().replace(/[€\s]/g,'');
-  if(s==='') return NaN;
-  const hasComma = s.indexOf(',')>-1, hasDot = s.indexOf('.')>-1;
+  if(raw === undefined || raw === null) return NaN;
+  let s = String(raw).trim();
+  if(s === '') return NaN;
+  let neg = false;
+  if(/^\(.*\)$/.test(s)){ neg = true; s = s.slice(1, -1); }                 // accounting style : (12,50 €)
+  s = s.replace(/[\u2212\u2012\u2013\u2014]/g, '-');                         // typographic minus signs
+  if(/-\s*$/.test(s)){ neg = true; s = s.replace(/-\s*$/, ''); }             // 12,50-
+  s = s.replace(/[€$£]|EUR|eur/g, '').replace(/[\s'\u2019]/g, '');           // currency, spaces (incl. non-breaking), apostrophes
+  if(s.charAt(0) === '-'){ neg = true; s = s.slice(1); }
+  else if(s.charAt(0) === '+'){ s = s.slice(1); }
+  if(s === '' || /[^0-9.,]/.test(s)) return NaN;
+  const hasComma = s.indexOf(',') > -1, hasDot = s.indexOf('.') > -1;
   if(hasComma && hasDot){
-    if(s.lastIndexOf(',') > s.lastIndexOf('.')){ s = s.replace(/\./g,'').replace(',', '.'); }
-    else { s = s.replace(/,/g,''); }
+    if(s.lastIndexOf(',') > s.lastIndexOf('.')){ s = s.replace(/\./g, '').replace(',', '.'); }
+    else { s = s.replace(/,/g, ''); }
   } else if(hasComma){ s = s.replace(',', '.'); }
-  return parseFloat(s);
+  const v = parseFloat(s);
+  return isNaN(v) ? NaN : (neg ? -v : v);
 }
+const FR_MONTHS = {janvier:1,janv:1,jan:1,fevrier:2,fevr:2,fev:2,mars:3,mar:3,avril:4,avr:4,mai:5,juin:6,juillet:7,juil:7,aout:8,septembre:9,sept:9,sep:9,octobre:10,oct:10,novembre:11,nov:11,decembre:12,dec:12};
 function parseFlexibleDate(raw){
   if(!raw) return null;
   const s = String(raw).trim();
-  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if(m) return m[1]+'-'+m[2]+'-'+m[3];
-  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
-  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})$/);
-  if(m) return '20'+m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  const out = (y, mo, d)=>{
+    const iso = y + '-' + String(mo).padStart(2,'0') + '-' + String(d).padStart(2,'0');
+    return isValidISO(iso) ? iso : null;
+  };
+  let m = s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:[ T].*)?$/);                       // 2026-10-03 (optionally with a time)
+  if(m) return out(m[1], +m[2], +m[3]);
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?:[ T,]+\d{1,2}[:h]\d{2}.*)?$/);      // 03/10/2026 (day first)
+  if(m) return out(m[3], +m[2], +m[1]);
+  m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})(?:[ T,]+\d{1,2}[:h]\d{2}.*)?$/);      // 03/10/26
+  if(m) return out('20' + m[3], +m[2], +m[1]);
+  m = s.match(/^(\d{1,2})(?:er)?\s+([A-Za-zÀ-ÿ.]+)\s+(\d{4}|\d{2})$/);                          // 3 oct. 2026 / 3 octobre 26
+  if(m){
+    const mo = FR_MONTHS[normKey(m[2]).replace(/\s/g, '')];
+    if(mo) return out(m[3].length === 2 ? '20' + m[3] : m[3], mo, +m[1]);
+  }
   const d = new Date(s);
-  if(!isNaN(d)) return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  if(!isNaN(d)) return out(d.getFullYear(), d.getMonth()+1, d.getDate());
   return null;
 }
 
-let csvParsedRows = null;
-function handleCsvFile(file){
-  const reader = new FileReader();
-  reader.onload = () => {
+function detectImportType(headers){
+  const h = headers.map(normKey);
+  const has = (...ns)=> ns.some(n=> h.some(x=> x === n || x.indexOf(n) !== -1));
+  if(has('mois du salaire')) return 'salary';
+  if(has('frequence', 'periodicite', 'source', 'date de reception')) return 'incomes';
+  return 'expenses';
+}
+function guessMapping(type, headers){
+  const spec = IMPORT_SPECS[type];
+  const h = headers.map(normKey);
+  const used = new Set(), map = {};
+  spec.fields.forEach(f=>{
+    let idx = -1;
+    for(const n of f.names){ const j = h.findIndex((x,jj)=> !used.has(jj) && x === n); if(j >= 0){ idx = j; break; } }
+    if(idx < 0){ for(const n of f.names){ const j = h.findIndex((x,jj)=> !used.has(jj) && x !== '' && x.indexOf(n) !== -1); if(j >= 0){ idx = j; break; } } }
+    map[f.k] = idx;
+    if(idx >= 0) used.add(idx);
+  });
+  return map;
+}
+function rowFilled(r){ return r.some(c=> String(c||'').trim() !== ''); }
+// A Numbers/Excel file may start with a title or a summary table : look for the row that really is a header.
+function locateCsvTable(rows){
+  let best = null;
+  rows.forEach((r, i)=>{
+    if(r.filter(c=> String(c||'').trim() !== '').length < 2) return;
+    const type = detectImportType(r);
+    const map = guessMapping(type, r);
+    const ok = map.amount >= 0 && (map.date >= 0 || (type === 'incomes' && map.year >= 0));
+    if(!ok) return;
+    const score = Object.keys(map).filter(k=> map[k] >= 0).length;
+    if(!best || score > best.score) best = {i, type, score};
+  });
+  if(!best){
+    const i = rows.findIndex(r=> r.filter(c=> String(c||'').trim() !== '').length >= 2);
+    if(i < 0) return null;
+    best = {i, type:'expenses', score:0};
+  }
+  const data = [];
+  for(let k = best.i + 1; k < rows.length; k++){
+    if(!rowFilled(rows[k])) break;                  // the table ends at the first empty row
+    data.push(rows[k]);
+  }
+  if(data.length === 0) return null;
+  return {headerIdx:best.i, type:best.type, data};
+}
+
+function countMap(keys){ const m = {}; keys.forEach(k=>{ m[k] = (m[k]||0) + 1; }); return m; }
+function buildImportPlan(type, map, data, opts){
+  const cell = (r, k)=> (map[k] >= 0 && map[k] < r.length) ? r[map[k]] : '';
+  const items = [];
+  let bad = 0, dup = 0;
+  let existing = {};
+  if(type === 'expenses') existing = countMap(state.expenses.map(e=> e.date+'|'+e.description.trim().toLowerCase()+'|'+e.amount.toFixed(2)));
+  if(type === 'incomes')  existing = countMap(state.incomes.map(i=> i.date ? 'd|'+i.date+'|'+i.label.trim().toLowerCase()+'|'+i.amount.toFixed(2) : 'l|'+i.year+'|'+i.label.trim().toLowerCase()+'|'+i.amount.toFixed(2)+'|'+i.frequency));
+  if(type === 'salary')   existing = countMap(state.salaryPayments.map(p=> p.date+'|'+p.amount.toFixed(2)+'|'+(p.label||'').trim().toLowerCase()));
+  const take = (key, item)=>{
+    if(opts.skipDup && existing[key] > 0){ existing[key]--; dup++; return; }
+    items.push(item);
+  };
+  data.forEach(r=>{
+    if(type === 'expenses'){
+      const date = parseFlexibleDate(cell(r,'date'));
+      let amount = parseAmount(cell(r,'amount'));
+      if(!date || isNaN(amount) || amount === 0){ bad++; return; }
+      if(opts.flip) amount = -amount;
+      const desc = String(cell(r,'desc')||'').trim() || 'Importé';
+      take(date+'|'+desc.toLowerCase()+'|'+amount.toFixed(2), {date, amount, desc, catName:String(cell(r,'cat')||'').trim()});
+    } else if(type === 'incomes'){
+      const amount = parseAmount(cell(r,'amount'));
+      if(isNaN(amount) || amount <= 0){ bad++; return; }
+      const label = String(cell(r,'desc')||'').trim() || 'Revenu importé';
+      const date = map.date >= 0 ? parseFlexibleDate(cell(r,'date')) : null;
+      if(date){
+        take('d|'+date+'|'+label.toLowerCase()+'|'+amount.toFixed(2), {date, year:parseInt(date.slice(0,4),10), frequency:'once', label, amount});
+      } else {
+        const y = parseInt(cell(r,'year'), 10);
+        if(!(y >= 1900 && y <= 2200)){ bad++; return; }
+        const frequency = normKey(cell(r,'freq')).indexOf('mens') === 0 ? 'monthly' : 'annual';
+        take('l|'+y+'|'+label.toLowerCase()+'|'+amount.toFixed(2)+'|'+frequency, {date:null, year:y, frequency, label, amount});
+      }
+    } else {
+      const date = parseFlexibleDate(cell(r,'date'));
+      const amount = parseAmount(cell(r,'amount'));
+      if(!date || isNaN(amount) || amount <= 0){ bad++; return; }
+      const label = String(cell(r,'desc')||'').trim() || state.settings.salary.employer;
+      const month = String(cell(r,'month')||'').trim();
+      take(date+'|'+amount.toFixed(2)+'|'+label.toLowerCase(), {date, amount, label, month: isYM(month) ? month : null});
+    }
+  });
+  return {items, bad, dup, total:data.length};
+}
+function executeImport(type, plan){
+  const base = Date.now();
+  if(type === 'expenses'){
+    plan.items.forEach((it, idx)=>{
+      let categoryId = 'uncategorized';
+      if(it.catName){
+        let ex = state.categories.find(c=> c.name.toLowerCase() === it.catName.toLowerCase());
+        if(!ex){
+          ex = {id:uid('cat'), name:it.catName, color:PALETTE[state.categories.length % PALETTE.length], flexible:true};
+          state.categories.push(ex);
+        }
+        categoryId = ex.id;
+      }
+      state.expenses.push({id:uid('exp'), date:it.date, description:it.desc, categoryId, amount:it.amount, createdAt:base+idx});
+    });
+  } else if(type === 'incomes'){
+    plan.items.forEach((it, idx)=>{
+      state.incomes.push({id:uid('inc'), year:it.year, frequency:it.frequency, label:it.label, amount:it.amount, date:it.date, createdAt:base+idx});
+    });
+  } else {
+    plan.items.forEach((it, idx)=>{
+      const def = salaryRuleMonth(it.date);
+      state.salaryPayments.push({id:uid('sal'), date:it.date, amount:it.amount, label:it.label, monthManual:(it.month && it.month !== def) ? it.month : null, createdAt:base+idx});
+    });
+  }
+  saveState();
+  renderAll();
+}
+
+// Reads the file as bytes so that UTF-8, UTF-16 and Windows-1252 (old Excel) files all show their accents correctly.
+function readCsvText(file, cb, onerr){
+  const r = new FileReader();
+  r.onload = ()=>{
+    let t = null;
     try{
-      const text = reader.result;
-      const delim = detectDelimiter(text);
-      const rows = parseCSV(text, delim);
-      if(rows.length < 2){ toast('Ce fichier CSV semble vide.', 'err'); return; }
-      csvParsedRows = rows;
-      openCsvMappingModal(rows);
+      if(typeof TextDecoder !== 'undefined'){
+        const b = new Uint8Array(r.result);
+        if(b[0] === 0xFF && b[1] === 0xFE) t = new TextDecoder('utf-16le').decode(b);
+        else if(b[0] === 0xFE && b[1] === 0xFF) t = new TextDecoder('utf-16be').decode(b);
+        else {
+          t = new TextDecoder('utf-8').decode(b);
+          if(t.indexOf('\uFFFD') !== -1){ try{ t = new TextDecoder('windows-1252').decode(b); }catch(e){} }
+        }
+      }
+    }catch(e){ t = null; }
+    if(t !== null){ cb(t); return; }
+    const r2 = new FileReader();
+    r2.onload = ()=> cb(String(r2.result || ''));
+    r2.onerror = onerr;
+    r2.readAsText(file);
+  };
+  r.onerror = onerr;
+  r.readAsArrayBuffer(file);
+}
+function handleCsvFile(file){
+  readCsvText(file, (text)=>{
+    try{
+      const rows = parseCSV(text, detectDelimiter(text));
+      const found = locateCsvTable(rows);
+      if(!found){ toast('Ce fichier CSV semble vide ou illisible.', 'err'); return; }
+      openCsvWizard(rows, found);
     }catch(e){
       console.error(e);
       toast("Impossible d'analyser ce fichier CSV.", 'err');
     }
-  };
-  reader.onerror = () => toast('Échec de la lecture du fichier.', 'err');
-  reader.readAsText(file);
+  }, ()=> toast('Échec de la lecture du fichier.', 'err'));
 }
-function openCsvMappingModal(rows){
-  const header = rows[0];
+function openCsvWizard(rows, found){
+  const old = document.getElementById('csvOverlay');
+  if(old) old.remove();
+  const headers = rows[found.headerIdx].map(h=> String(h||'').trim());
+  const wz = {type:found.type, map:guessMapping(found.type, headers), skipDup:true, flip:false, done:false};
+  // bank statements list expenses as negative numbers : suggest flipping the sign when most amounts are negative
+  const probe = guessMapping('expenses', headers);
+  if(wz.type === 'expenses' && probe.amount >= 0){
+    const vals = found.data.map(r=> parseAmount(r[probe.amount])).filter(v=> !isNaN(v));
+    if(vals.length >= 3 && vals.filter(v=> v < 0).length / vals.length > 0.8) wz.flip = true;
+  }
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
-  const fieldOptions = (selectedIdx) => header.map((h,i)=>`<option value="${i}" ${i===selectedIdx?'selected':''}>${escapeHtml(h||('Colonne '+(i+1)))}</option>`).join('') + `<option value="-1" ${selectedIdx===-1?'selected':''}>— Aucune —</option>`;
-  const guess = (names) => header.findIndex(h => names.some(n => (h||'').toLowerCase().includes(n)));
-  const gDate = guess(['date']);
-  const gDesc = guess(['description','libell','desc','achat','item']);
-  const gAmount = guess(['montant','amount','prix','somme','total']);
-  const gCat = guess(['catégorie','categorie','category','type']);
-
+  overlay.id = 'csvOverlay';
   overlay.innerHTML = `<div class="modal">
     <button class="modal-close" id="csvModalClose" type="button">&times;</button>
-    <h3>Importer des dépenses</h3>
-    <p class="hint">${rows.length-1} ligne(s) détectée(s). Associe tes colonnes aux champs attendus, puis vérifie l'aperçu.</p>
-    <div class="field-select-row"><span class="fname">Date</span><select id="mapDate">${fieldOptions(gDate)}</select></div>
-    <div class="field-select-row"><span class="fname">Description</span><select id="mapDesc">${fieldOptions(gDesc)}</select></div>
-    <div class="field-select-row"><span class="fname">Montant</span><select id="mapAmount">${fieldOptions(gAmount)}</select></div>
-    <div class="field-select-row"><span class="fname">Catégorie</span><select id="mapCat">${fieldOptions(gCat)}</select></div>
+    <h3>Importer un fichier CSV</h3>
+    <p class="hint" id="csvInfo"></p>
+    <label for="csvType">Que contient ce fichier ?</label>
+    <select id="csvType">${Object.keys(IMPORT_SPECS).map(k=> `<option value="${k}">${IMPORT_SPECS[k].label}</option>`).join('')}</select>
+    <h2 class="section-title" style="margin-top:16px;">Colonnes<span class="rule"></span></h2>
+    <div id="csvMap"></div>
+    <label id="csvFlipRow" style="display:none; margin-top:12px; align-items:flex-start; gap:8px; font-size:0.82rem; color:var(--ink);"><input type="checkbox" id="csvFlip" style="margin-top:3px;"><span>Inverser le signe des montants (relevé bancaire où les dépenses sont négatives)</span></label>
+    <label style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:0.82rem; color:var(--ink);"><input type="checkbox" id="csvSkipDup" checked style="margin-top:3px;"><span>Ignorer les lignes déjà présentes (évite les doublons si tu réimportes le même fichier)</span></label>
     <h2 class="section-title" style="margin-top:18px;">Aperçu<span class="rule"></span></h2>
     <div class="scroll-x"><table class="data" id="csvPreviewTable"></table></div>
     <div id="csvImportSummary" class="banner" style="display:none;"></div>
@@ -2815,68 +3047,63 @@ function openCsvMappingModal(rows){
     </div>
   </div>`;
   document.body.appendChild(overlay);
+  const g = id=> document.getElementById(id);
+  const colOptions = sel => headers.map((h,i)=> `<option value="${i}" ${i===sel?'selected':''}>${escapeHtml(h || ('Colonne '+(i+1)))}</option>`).join('') + `<option value="-1" ${sel===-1?'selected':''}>— Aucune —</option>`;
 
-  function refreshPreview(){
-    const iDate = parseInt(document.getElementById('mapDate').value);
-    const iDesc = parseInt(document.getElementById('mapDesc').value);
-    const iAmount = parseInt(document.getElementById('mapAmount').value);
-    const iCat = parseInt(document.getElementById('mapCat').value);
-    const sample = rows.slice(1, 6);
-    let html = '<tr><th>Date</th><th>Description</th><th>Montant</th><th>Catégorie</th></tr>';
-    sample.forEach(r=>{
-      const d = iDate>=0 ? parseFlexibleDate(r[iDate]) : '—';
-      const desc = iDesc>=0 ? r[iDesc] : '—';
-      const amt = iAmount>=0 ? parseAmount(r[iAmount]) : NaN;
-      const cat = iCat>=0 ? r[iCat] : '—';
-      html += `<tr><td>${escapeHtml(d||'?')}</td><td>${escapeHtml(desc||'')}</td><td>${isNaN(amt)?'?':fmtEUR(amt)}</td><td>${escapeHtml(cat||'')}</td></tr>`;
+  function missingRequired(){ return IMPORT_SPECS[wz.type].fields.filter(f=> f.req && !(wz.map[f.k] >= 0)); }
+  function renderPreview(){
+    const spec = IMPORT_SPECS[wz.type];
+    const plan = buildImportPlan(wz.type, wz.map, found.data, {skipDup:wz.skipDup, flip:wz.flip});
+    const miss = missingRequired();
+    g('csvInfo').textContent = (found.headerIdx > 0 ? 'Tableau trouvé à la ligne ' + (found.headerIdx+1) + ' du fichier. ' : '')
+      + found.data.length + ' ligne' + (found.data.length>1?'s':'') + ' de données : ' + plan.items.length + ' à importer, '
+      + plan.dup + ' déjà présente' + (plan.dup>1?'s':'') + ', ' + plan.bad + ' illisible' + (plan.bad>1?'s':'') + '.';
+    let html = '<tr>' + spec.fields.map(f=> '<th>'+escapeHtml(f.label.replace(/ \(.*\)/, ''))+'</th>').join('') + '</tr>';
+    found.data.slice(0, 6).forEach(r=>{
+      html += '<tr>' + spec.fields.map(f=>{
+        const raw = wz.map[f.k] >= 0 ? (r[wz.map[f.k]] || '') : '';
+        let v = raw;
+        if(f.k === 'date'){ v = raw === '' ? '' : (parseFlexibleDate(raw) || '?'); }
+        else if(f.k === 'amount'){ const a = parseAmount(raw); v = isNaN(a) ? '?' : fmtEUR(wz.flip ? -a : a); }
+        return '<td>'+escapeHtml(v)+'</td>';
+      }).join('') + '</tr>';
     });
-    document.getElementById('csvPreviewTable').innerHTML = html;
+    g('csvPreviewTable').innerHTML = html;
+    g('csvConfirmImport').disabled = wz.done || miss.length > 0 || plan.items.length === 0;
+    g('csvFlipRow').style.display = wz.type === 'expenses' ? 'flex' : 'none';
+    return plan;
   }
-  refreshPreview();
-  ['mapDate','mapDesc','mapAmount','mapCat'].forEach(id=> document.getElementById(id).addEventListener('change', refreshPreview));
-
-  document.getElementById('csvModalClose').addEventListener('click', ()=> overlay.remove());
-  document.getElementById('csvCancelImport').addEventListener('click', ()=> overlay.remove());
-  document.getElementById('csvConfirmImport').addEventListener('click', ()=>{
-    const iDate = parseInt(document.getElementById('mapDate').value);
-    const iDesc = parseInt(document.getElementById('mapDesc').value);
-    const iAmount = parseInt(document.getElementById('mapAmount').value);
-    const iCat = parseInt(document.getElementById('mapCat').value);
-    if(iDate<0 || iAmount<0){ toast('La date et le montant sont obligatoires.', 'err'); return; }
-    let imported = 0, skipped = 0;
-    const importBase = Date.now();
-    rows.slice(1).forEach((r, rowIdx)=>{
-      const date = parseFlexibleDate(r[iDate]);
-      const amount = parseAmount(r[iAmount]);
-      if(!date || isNaN(amount)){ skipped++; return; }
-      const desc = iDesc>=0 ? (r[iDesc]||'').trim() : 'Importé';
-      let categoryId = 'uncategorized';
-      if(iCat>=0){
-        const rawCat = (r[iCat]||'').trim();
-        if(rawCat){
-          let existing = state.categories.find(c=> c.name.toLowerCase()===rawCat.toLowerCase());
-          if(!existing){
-            existing = {id:uid('cat'), name:rawCat, color: PALETTE[state.categories.length % PALETTE.length], flexible:true};
-            state.categories.push(existing);
-          }
-          categoryId = existing.id;
-        }
-      }
-      state.expenses.push({id:uid('exp'), date, description: desc || 'Importé', categoryId, amount, createdAt: importBase + rowIdx});
-      imported++;
-    });
-    saveState();
-    const summary = document.getElementById('csvImportSummary');
-    summary.style.display = 'block';
-    summary.textContent = imported+' dépense(s) importée(s)'+(skipped>0?', '+skipped+' ligne(s) ignorée(s) (date ou montant illisible).':'.');
-    toast(imported+' dépense(s) importée(s).', 'ok');
-    populateCategorySelects();
-    renderCategoriesTab();
-    refreshYearFilters();
-    renderExpensesList();
-    renderDashboard();
-    setTimeout(()=> overlay.remove(), 1600);
+  function renderMap(){
+    const spec = IMPORT_SPECS[wz.type];
+    g('csvType').value = wz.type;
+    g('csvMap').innerHTML = spec.fields.map(f=> `<div class="field-select-row"><span class="fname">${escapeHtml(f.label)}${f.req?' *':''}</span><select data-f="${f.k}">${colOptions(wz.map[f.k])}</select></div>`).join('');
+    g('csvMap').querySelectorAll('select').forEach(s=> s.addEventListener('change', ()=>{ wz.map[s.dataset.f] = parseInt(s.value, 10); renderPreview(); }));
+    g('csvFlip').checked = wz.flip;
+    renderPreview();
+  }
+  g('csvType').addEventListener('change', ()=>{ wz.type = g('csvType').value; wz.map = guessMapping(wz.type, headers); renderMap(); });
+  g('csvSkipDup').addEventListener('change', ()=>{ wz.skipDup = g('csvSkipDup').checked; renderPreview(); });
+  g('csvFlip').addEventListener('change', ()=>{ wz.flip = g('csvFlip').checked; renderPreview(); });
+  g('csvModalClose').addEventListener('click', ()=> overlay.remove());
+  g('csvCancelImport').addEventListener('click', ()=> overlay.remove());
+  overlay.addEventListener('click', (ev)=>{ if(ev.target === overlay) overlay.remove(); });
+  g('csvConfirmImport').addEventListener('click', ()=>{
+    if(wz.done) return;
+    const miss = missingRequired();
+    if(miss.length){ toast('Associe la colonne « ' + miss[0].label + ' ».', 'err'); return; }
+    const plan = buildImportPlan(wz.type, wz.map, found.data, {skipDup:wz.skipDup, flip:wz.flip});
+    executeImport(wz.type, plan);
+    wz.done = true;
+    const sum = g('csvImportSummary');
+    sum.style.display = 'block';
+    sum.textContent = plan.items.length + ' ligne' + (plan.items.length>1?'s':'') + ' importée' + (plan.items.length>1?'s':'')
+      + (plan.dup ? ', ' + plan.dup + ' doublon' + (plan.dup>1?'s':'') + ' ignoré' + (plan.dup>1?'s':'') : '')
+      + (plan.bad ? ', ' + plan.bad + ' ligne' + (plan.bad>1?'s':'') + ' illisible' + (plan.bad>1?'s':'') + ' ignorée' + (plan.bad>1?'s':'') : '') + '.';
+    g('csvConfirmImport').disabled = true;
+    g('csvCancelImport').textContent = 'Fermer';
+    toast(plan.items.length + ' ligne(s) importée(s).', 'ok');
   });
+  renderMap();
 }
 
 /* ============================= INIT ============================= */
