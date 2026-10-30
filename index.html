@@ -373,6 +373,13 @@
   .list-item.just-added{animation:flashRow 2.6s ease; border-radius:6px;}
   @keyframes flashRow{0%{background:var(--brass-soft);} 100%{background:transparent;}}
   input:disabled, select:disabled{opacity:0.65;}
+  .refund-box{margin-top:12px; border:1px dashed var(--line); border-radius:8px; padding:10px 12px;}
+  .refund-box summary{cursor:pointer; font-size:0.84rem; font-weight:600; color:var(--vault);}
+  .refund-box[open] summary{margin-bottom:2px;}
+  .refund-line{font-size:0.76rem; margin-top:3px;}
+  .refund-line.pending{color:var(--brass);}
+  .refund-line.pending.late{color:var(--loss); font-weight:600;}
+  .refund-line.received{color:var(--ink-soft);}
 </style>
 </head>
 <body>
@@ -399,7 +406,7 @@
   <!-- EXPENSES -->
   <section class="tab-panel" id="tab-expenses" data-tab="expenses">
     <h2 class="section-title">Nouvelle dépense<span class="rule"></span></h2>
-    <p class="hint">Un remboursement à enregistrer ? Utilise « Note de crédit » dans l'onglet Catégories.</p>
+    <p class="hint">Une partie sera remboursée plus tard (mutualité, sécurité sociale…) ? Ouvre « Un remboursement est prévu ? » dans le formulaire. Pour un remboursement qui ne correspond à aucune dépense précise (régularisation d'une facture, par exemple), utilise « Note de crédit » dans l'onglet Catégories.</p>
     <div class="card">
       <label for="expDate">Date</label>
       <input type="date" id="expDate">
@@ -411,10 +418,38 @@
           <select id="expCat"></select>
         </div>
         <div>
-          <label for="expAmount">Montant (€)</label>
+          <label for="expAmount">Montant payé (€)</label>
           <input type="number" id="expAmount" step="0.01" min="0" placeholder="0.00">
         </div>
       </div>
+      <details id="expRefundBox" class="refund-box">
+        <summary>Un remboursement est prévu ? (facultatif)</summary>
+        <p class="hint" style="margin:8px 0 0;">C'est la somme réellement payée (montant payé moins remboursement) qui compte dans toutes les statistiques, même si le remboursement n'est pas encore arrivé.</p>
+        <div class="form-row">
+          <div>
+            <label for="expRefAmount">Remboursement (€)</label>
+            <input type="number" id="expRefAmount" step="0.01" min="0" placeholder="0.00">
+          </div>
+          <div>
+            <label for="expRefStatus">Statut</label>
+            <select id="expRefStatus">
+              <option value="pending">En attente</option>
+              <option value="received">Déjà reçu</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <label for="expRefDate" id="expRefDateLbl">Date prévue (facultatif)</label>
+            <input type="date" id="expRefDate">
+          </div>
+          <div>
+            <label for="expRefSource">Source (facultatif)</label>
+            <input type="text" id="expRefSource" placeholder="Ex. Mutualité">
+          </div>
+        </div>
+        <p class="hint" id="expRefPreview" style="margin:8px 0 0;"></p>
+      </details>
       <div class="btn-row">
         <button class="btn" id="expSubmit" type="button">Ajouter la dépense</button>
         <button class="btn secondary" id="expCancelEdit" type="button" style="display:none;">Annuler</button>
@@ -439,6 +474,9 @@
           <label for="expFilterCat">Catégorie</label>
           <select id="expFilterCat"></select>
         </div>
+      </div>
+      <div id="expPendingBox" style="display:none; margin-top:12px;">
+        <label style="display:flex; align-items:flex-start; gap:8px; margin:0; font-size:0.82rem; color:var(--ink);"><input type="checkbox" id="expPendingOnly" style="margin-top:3px;"><span id="expPendingText"></span></label>
       </div>
       <p class="hint" id="expSearchHint" style="display:none; margin:8px 0 0;">Recherche active : le filtre "Année" est ignoré, tout l'historique est parcouru.</p>
     </div>
@@ -734,6 +772,21 @@ function todayISO(){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function catById(id){ return state.categories.find(c=>c.id===id) || state.categories.find(c=>c.id==='uncategorized'); }
+// ---- Reimbursements -------------------------------------------------------------------------
+// An expense keeps `amount` = REAL COST (what was paid minus the reimbursement) : every statistic already reads `amount`.
+// Extra fields (only when a reimbursement exists) : paid = amount actually paid, refund = {amount, status:'pending'|'received', date, source}.
+const r2 = n => Math.round(n*100)/100;
+function expensePaid(e){ return e.paid !== undefined ? e.paid : e.amount; }
+function setExpenseRefund(e, paid, refund){
+  paid = r2(paid);
+  if(!refund || !(refund.amount > 0)){ delete e.refund; delete e.paid; e.amount = paid; return; }
+  const a = Math.min(r2(refund.amount), paid > 0 ? paid : 0);
+  if(!(a > 0)){ delete e.refund; delete e.paid; e.amount = paid; return; }
+  e.paid = paid;
+  e.refund = {amount:a, status: refund.status === 'received' ? 'received' : 'pending', date: refund.date || null, source: String(refund.source || '').trim()};
+  e.amount = r2(paid - a);
+}
+function pendingRefunds(){ return state.expenses.filter(e=> e.refund && e.refund.status === 'pending'); }
 function incomeAnnual(inc){ return inc.frequency==='monthly' ? inc.amount*12 : inc.amount; }
 
 function allYearsInData(){
@@ -822,16 +875,38 @@ function setupExpensesForm(){
   document.getElementById('expFilterCat').addEventListener('change', renderExpensesList);
   document.getElementById('expSearch').addEventListener('input', renderExpensesList);
   document.getElementById('expSort').addEventListener('change', renderExpensesList);
+  document.getElementById('expPendingOnly').addEventListener('change', renderExpensesList);
+  ['expAmount','expRefAmount','expRefStatus'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', updateRefundUi);
+    document.getElementById(id).addEventListener('change', updateRefundUi);
+  });
   document.querySelectorAll('#expTotalsPills .pill').forEach(p=> p.addEventListener('click', ()=>{
     expTotalsMode = p.dataset.g;
     renderExpensesTotals();
   }));
+}
+function updateRefundUi(){
+  const st = document.getElementById('expRefStatus').value;
+  document.getElementById('expRefDateLbl').textContent = st === 'received' ? 'Date de réception' : 'Date prévue (facultatif)';
+  const paid = parseFloat(document.getElementById('expAmount').value);
+  const ref = parseFloat(document.getElementById('expRefAmount').value);
+  const el = document.getElementById('expRefPreview');
+  if(isNaN(paid) || isNaN(ref) || ref <= 0){ el.textContent = ''; return; }
+  el.textContent = ref > paid
+    ? 'Le remboursement ne peut pas dépasser le montant payé.'
+    : 'Payé ' + fmtEUR(paid) + ' − remboursement ' + fmtEUR(ref) + ' = coût réel ' + fmtEUR(paid - ref) + '.';
 }
 function resetExpenseForm(){
   document.getElementById('expDate').value = todayISO();
   document.getElementById('expDesc').value = '';
   document.getElementById('expAmount').value = '';
   document.getElementById('expCat').selectedIndex = 0;
+  document.getElementById('expRefAmount').value = '';
+  document.getElementById('expRefStatus').value = 'pending';
+  document.getElementById('expRefDate').value = '';
+  document.getElementById('expRefSource').value = '';
+  document.getElementById('expRefundBox').open = false;
+  updateRefundUi();
   document.getElementById('expSubmit').textContent = 'Ajouter la dépense';
   document.getElementById('expCancelEdit').style.display = 'none';
 }
@@ -843,14 +918,26 @@ function submitExpense(){
   if(!date){ toast('Indique une date.', 'err'); return; }
   if(!desc){ toast('Indique une description.', 'err'); return; }
   if(isNaN(amount) || amount<=0){ toast('Indique un montant valide.', 'err'); return; }
+  let refund = null;
+  const refAmt = parseFloat(document.getElementById('expRefAmount').value);
+  if(!isNaN(refAmt) && refAmt > 0){
+    const status = document.getElementById('expRefStatus').value === 'received' ? 'received' : 'pending';
+    const rdate = document.getElementById('expRefDate').value || null;
+    if(refAmt > amount){ toast('Le remboursement ne peut pas dépasser le montant payé.', 'err'); return; }
+    if(rdate && !isValidISO(rdate)){ toast('Date du remboursement invalide.', 'err'); return; }
+    if(status === 'received' && !rdate){ toast('Indique la date de réception du remboursement.', 'err'); return; }
+    refund = {amount:refAmt, status, date:rdate, source:document.getElementById('expRefSource').value};
+  }
   if(editingExpenseId){
     const e = state.expenses.find(x=>x.id===editingExpenseId);
-    if(e){ e.date=date; e.description=desc; e.categoryId=cat; e.amount=amount; }
+    if(e){ e.date=date; e.description=desc; e.categoryId=cat; setExpenseRefund(e, amount, refund); }
     toast('Dépense mise à jour.', 'ok');
     editingExpenseId = null;
   } else {
-    state.expenses.push({id:uid('exp'), date, description:desc, categoryId:cat, amount, createdAt:Date.now()});
-    toast('Dépense ajoutée.', 'ok');
+    const e = {id:uid('exp'), date, description:desc, categoryId:cat, amount:0, createdAt:Date.now()};
+    setExpenseRefund(e, amount, refund);
+    state.expenses.push(e);
+    toast(refund ? 'Dépense ajoutée, coût réel ' + fmtEUR(e.amount) + '.' : 'Dépense ajoutée.', 'ok');
   }
   saveState();
   resetExpenseForm();
@@ -867,11 +954,65 @@ function editExpense(id){
   document.getElementById('expDate').value = e.date;
   document.getElementById('expDesc').value = e.description;
   document.getElementById('expCat').value = e.categoryId;
-  document.getElementById('expAmount').value = e.amount;
+  document.getElementById('expAmount').value = expensePaid(e);
+  const rf = e.refund;
+  document.getElementById('expRefAmount').value = rf ? rf.amount : '';
+  document.getElementById('expRefStatus').value = rf ? rf.status : 'pending';
+  document.getElementById('expRefDate').value = rf && rf.date ? rf.date : '';
+  document.getElementById('expRefSource').value = rf ? rf.source : '';
+  document.getElementById('expRefundBox').open = !!rf;
+  updateRefundUi();
   document.getElementById('expSubmit').textContent = 'Mettre à jour';
   document.getElementById('expCancelEdit').style.display = 'inline-flex';
   switchTab('expenses');
   document.getElementById('expDesc').scrollIntoView({behavior:'smooth', block:'center'});
+}
+// "Marquer reçu" : the reimbursement arrived (possibly a different amount than expected)
+function openRefundReceivedModal(id){
+  const e = state.expenses.find(x=>x.id===id);
+  if(!e || !e.refund) return;
+  const old = document.getElementById('refundOverlay');
+  if(old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'refundOverlay';
+  overlay.innerHTML = `<div class="modal">
+    <button class="modal-close" id="rcClose" type="button">&times;</button>
+    <h3>Remboursement reçu</h3>
+    <p class="hint">${escapeHtml(e.description)} · payé ${fmtEUR(expensePaid(e))} · remboursement attendu ${fmtEUR(e.refund.amount)}.</p>
+    <label for="rcDate">Date de réception</label>
+    <input type="date" id="rcDate">
+    <label for="rcAmount">Montant reçu (€)</label>
+    <input type="number" id="rcAmount" step="0.01" min="0">
+    <p class="hint" id="rcPreview" style="margin:10px 0 0;"></p>
+    <div class="btn-row">
+      <button class="btn" id="rcSave" type="button">Enregistrer</button>
+      <button class="btn secondary" id="rcCancel" type="button">Annuler</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const g = i => document.getElementById(i);
+  g('rcDate').value = todayISO();
+  g('rcAmount').value = e.refund.amount;
+  const paid = expensePaid(e);
+  const upd = ()=>{
+    const a = parseFloat(g('rcAmount').value);
+    g('rcPreview').textContent = isNaN(a) ? '' : (a > paid ? 'Le montant reçu ne peut pas dépasser le montant payé.'
+      : 'Coût réel : ' + fmtEUR(e.amount) + ' → ' + fmtEUR(paid - a) + (a === 0 ? ' (remboursement refusé : il sera retiré).' : '.'));
+  };
+  g('rcAmount').addEventListener('input', upd); upd();
+  overlay.addEventListener('click', (ev)=>{ if(ev.target === overlay) overlay.remove(); });
+  g('rcClose').addEventListener('click', ()=> overlay.remove());
+  g('rcCancel').addEventListener('click', ()=> overlay.remove());
+  g('rcSave').addEventListener('click', ()=>{
+    const date = g('rcDate').value, a = parseFloat(g('rcAmount').value);
+    if(!isValidISO(date)){ toast('Indique la date de réception.', 'err'); return; }
+    if(isNaN(a) || a < 0 || a > paid){ toast('Montant reçu invalide (entre 0 et ' + fmtEUR(paid) + ').', 'err'); return; }
+    setExpenseRefund(e, paid, {amount:a, status:'received', date, source:e.refund.source});
+    overlay.remove();
+    afterDateChange();
+    toast(a === 0 ? 'Remboursement retiré : coût réel ' + fmtEUR(e.amount) + '.' : 'Remboursement enregistré, coût réel ' + fmtEUR(e.amount) + '.', 'ok');
+  });
 }
 function deleteExpenseConfirm(id, btn){
   if(btn.dataset.confirming==='1'){
@@ -909,6 +1050,7 @@ function getFilteredExpenses(){
     list = list.filter(e=> new Date(e.date+'T00:00:00').getFullYear() === parseInt(yFilter));
   }
   if(cFilter !== 'all') list = list.filter(e=> e.categoryId === cFilter);
+  if(document.getElementById('expPendingOnly').checked) list = list.filter(e=> e.refund && e.refund.status === 'pending');
   return list;
 }
 function periodKeyOf(date, mode){
@@ -939,16 +1081,23 @@ function renderExpensesTotals(){
   const map = new Map();
   list.forEach(e=>{
     const k = periodKeyOf(e.date, mode);
-    const r = map.get(k) || {sum:0, count:0, credit:0, cn:0};
+    const r = map.get(k) || {sum:0, count:0, credit:0, cn:0, refund:0, rp:0};
     r.sum += e.amount;
-    if(e.amount < 0){ r.credit += -e.amount; r.cn++; } else { r.count++; }
+    if(e.amount < 0){ r.credit += -e.amount; r.cn++; }
+    else {
+      r.count++;
+      if(e.refund){ r.refund += e.refund.amount; if(e.refund.status === 'pending') r.rp += e.refund.amount; }
+    }
     map.set(k, r);
   });
   const keys = Array.from(map.keys()).sort((a,b)=> a<b ? -1 : a>b ? 1 : 0);
   const total = list.reduce((s,e)=> s+e.amount, 0);
-  const paid = list.filter(e=> e.amount > 0).reduce((s,e)=> s+e.amount, 0);
+  const spent = list.filter(e=> e.amount >= 0);
+  const paid = spent.reduce((s,e)=> s + expensePaid(e), 0);
+  const refunds = spent.reduce((s,e)=> s + (e.refund ? e.refund.amount : 0), 0);
+  const refundsPending = spent.reduce((s,e)=> s + (e.refund && e.refund.status === 'pending' ? e.refund.amount : 0), 0);
   const credit = list.filter(e=> e.amount < 0).reduce((s,e)=> s-e.amount, 0);
-  const np = list.filter(e=> e.amount > 0).length, nc = list.length - np;
+  const np = spent.length, nc = list.length - np;
   const span = periodSpan(keys[0], keys[keys.length-1], mode);
   const unit = {year:'an', month:'mois', week:'semaine'}[mode];
   const unitPlural = {year:'ans', month:'mois', week:'semaines'}[mode];
@@ -964,6 +1113,7 @@ function renderExpensesTotals(){
     }
     const parts = [];
     if(r.count > 0) parts.push(`${r.count} dépense${r.count>1?'s':''}`);
+    if(r.refund > 0) parts.push(`remboursements <span class="cr-tag">−${fmtEUR(r.refund)}</span>${r.rp>0?' (dont '+fmtEUR(r.rp)+' attendus)':''}`);
     if(r.cn > 0) parts.push(`${r.cn} note${r.cn>1?'s':''} de crédit (<span class="cr-tag">−${fmtEUR(r.credit)}</span>)`);
     return `<div class="tot-row">
       <div class="tot-main"><span>${escapeHtml(periodLabel(k, mode))}</span><span class="tot-amt${r.sum<0?' credit':''}">${fmtEUR(r.sum)}</span></div>
@@ -971,8 +1121,10 @@ function renderExpensesTotals(){
       <div class="tot-meta">${parts.join(' · ')}${delta}</div>
     </div>`;
   }).join('');
-  const head = nc > 0
-    ? `<strong>${fmtEUR(total)}</strong> net · ${np} dépense${np>1?'s':''} (${fmtEUR(paid)}) moins ${nc} note${nc>1?'s':''} de crédit (<span class="cr-tag">−${fmtEUR(credit)}</span>)`
+  const head = (nc > 0 || refunds > 0)
+    ? `<strong>${fmtEUR(total)}</strong> réellement payé · ${np} dépense${np>1?'s':''} (${fmtEUR(paid)})`
+      + (refunds > 0 ? ` moins remboursements (<span class="cr-tag">−${fmtEUR(refunds)}</span>${refundsPending>0?', dont '+fmtEUR(refundsPending)+' attendus':''})` : '')
+      + (nc > 0 ? ` moins ${nc} note${nc>1?'s':''} de crédit (<span class="cr-tag">−${fmtEUR(credit)}</span>)` : '')
     : `<strong>${fmtEUR(total)}</strong> au total · ${list.length} dépense${list.length>1?'s':''}`;
   body.innerHTML = `<div class="tot-summary">${head}<br>
     Moyenne : <strong>${fmtEUR(total/span)}</strong> par ${unit} (sur ${span} ${span>1?unitPlural:unit}, périodes sans dépense comprises)</div>
@@ -987,13 +1139,28 @@ function renderExpensesList(){
   yearSelect.disabled = isSearching;
   searchHint.style.display = isSearching ? 'block' : 'none';
 
+  // reminder of the reimbursements still to come (computed before filtering)
+  const pend = pendingRefunds();
+  const pendBox = document.getElementById('expPendingBox'), pendOnly = document.getElementById('expPendingOnly');
+  if(pend.length === 0){ pendOnly.checked = false; pendBox.style.display = 'none'; }
+  else {
+    const today = todayISO();
+    const pendTotal = pend.reduce((s,e)=> s + e.refund.amount, 0);
+    const late = pend.filter(e=> e.refund.date && e.refund.date < today).length;
+    document.getElementById('expPendingText').textContent = pend.length + ' remboursement' + (pend.length>1?'s':'') + ' en attente (' + fmtEUR(pendTotal) + ')'
+      + (late ? ', dont ' + late + ' en retard' : '') + ' : afficher seulement ceux-là';
+    pendBox.style.display = 'block';
+  }
+
   const sortMode = document.getElementById('expSort').value;
   let list = getFilteredExpenses().sort(sortMode==='created'
     ? (a,b)=> (b.createdAt||0)-(a.createdAt||0)
     : (a,b)=> b.date.localeCompare(a.date) || (b.createdAt||0)-(a.createdAt||0));
   renderExpensesTotals();
   if(list.length===0){
-    wrap.innerHTML = isSearching
+    wrap.innerHTML = pendOnly.checked
+      ? `<div class="empty"><div class="big">Aucun remboursement en attente</div>Rien à afficher avec ces filtres.</div>`
+      : isSearching
       ? `<div class="empty"><div class="big">Aucun résultat</div>Aucune dépense ne correspond à "${escapeHtml(searchTerm)}", sur toutes les années.</div>`
       : `<div class="empty"><div class="big">Aucune dépense</div>Ajoute ta première dépense ci-dessus pour commencer le suivi.</div>`;
     return;
@@ -1001,12 +1168,22 @@ function renderExpensesList(){
   wrap.innerHTML = list.map(e=>{
     const c = catById(e.categoryId);
     const isCredit = e.amount < 0;
+    const rf = e.refund;
+    let refundHtml = '';
+    if(rf){
+      const late = rf.status === 'pending' && rf.date && rf.date < todayISO();
+      refundHtml = rf.status === 'pending'
+        ? `<div class="refund-line pending${late?' late':''}">Remboursement attendu : <strong>${fmtEUR(rf.amount)}</strong>${rf.source?' ('+escapeHtml(rf.source)+')':''}${rf.date?' · prévu le '+fmtDateFR(rf.date)+(late?' (en retard)':''):''}</div>`
+        : `<div class="refund-line received">Remboursement reçu : <strong>${fmtEUR(rf.amount)}</strong>${rf.source?' ('+escapeHtml(rf.source)+')':''}${rf.date?' le '+fmtDateFR(rf.date):''}</div>`;
+    }
     return `<div class="list-item">
       <div class="dot" style="background:${c.color}"></div>
       <div class="body">
         <div class="row1"><span class="desc">${escapeHtml(e.description)}</span><span class="amount${isCredit?' credit':''}">${fmtEUR(e.amount)}</span></div>
-        <div class="meta">${fmtDateFR(e.date)} · ${escapeHtml(c.name)}${isCredit?' · <span class="cr-tag">note de crédit</span>':''}</div>
+        <div class="meta">${fmtDateFR(e.date)} · ${escapeHtml(c.name)}${isCredit?' · <span class="cr-tag">note de crédit</span>':''}${rf?' · payé '+fmtEUR(e.paid):''}</div>
+        ${refundHtml}
         <div class="actions">
+          ${rf && rf.status === 'pending' ? `<button data-act="refund-received" data-id="${e.id}">Marquer reçu</button>` : ''}
           <button data-act="edit" data-id="${e.id}">Modifier</button>
           <button data-act="del" data-id="${e.id}">Suppr.</button>
         </div>
@@ -1015,6 +1192,14 @@ function renderExpensesList(){
   }).join('');
   wrap.querySelectorAll('button[data-act="edit"]').forEach(b=> b.addEventListener('click', ()=> editExpense(b.dataset.id)));
   wrap.querySelectorAll('button[data-act="del"]').forEach(b=> b.addEventListener('click', ()=> deleteExpenseConfirm(b.dataset.id, b)));
+  wrap.querySelectorAll('button[data-act="refund-received"]').forEach(b=> b.addEventListener('click', ()=> openRefundReceivedModal(b.dataset.id)));
+}
+function showPendingRefunds(){
+  document.getElementById('expSearch').value = '';
+  document.getElementById('expFilterYear').value = 'all';
+  document.getElementById('expFilterCat').value = 'all';
+  document.getElementById('expPendingOnly').checked = true;
+  switchTab('expenses');
 }
 function renderExpensesTab(){
   refreshYearFilters();
@@ -1503,7 +1688,7 @@ function openCreditModal(catId, editId){
   overlay.innerHTML = `<div class="modal">
     <button class="modal-close" id="crClose" type="button">&times;</button>
     <h3>${ex ? 'Modifier la note de crédit' : 'Nouvelle note de crédit'}</h3>
-    <p class="hint">Catégorie : <strong>${escapeHtml(cat.name)}</strong>. Une note de crédit est un remboursement : elle vient en déduction des dépenses de la catégorie (par exemple la régularisation annuelle d'une facture d'énergie quand tes acomptes étaient trop élevés). Si la régularisation te réclame un complément, ajoute plutôt une dépense normale.</p>
+    <p class="hint">Catégorie : <strong>${escapeHtml(cat.name)}</strong>. Une note de crédit est un remboursement : elle vient en déduction des dépenses de la catégorie (par exemple la régularisation annuelle d'une facture d'énergie quand tes acomptes étaient trop élevés). Si la régularisation te réclame un complément, ajoute plutôt une dépense normale. Si ce remboursement concerne une dépense encodée avec « Un remboursement est prévu ? », marque-le plutôt « reçu » sur cette dépense : sinon il serait déduit deux fois.</p>
     <label for="crDate">Date de la note de crédit</label>
     <input type="date" id="crDate">
     <label for="crAmount">Montant remboursé (€)</label>
@@ -1666,11 +1851,17 @@ function viewCategoryExpenses(catId){
 }
 function renderCategoriesTab(){
   const wrap = document.getElementById('categoriesList');
-  const totals = {}, paid = {}, credits = {}, nPaid = {}, nCredit = {};
+  const totals = {}, paid = {}, credits = {}, nPaid = {}, nCredit = {}, refunds = {}, refundsPending = {};
   state.expenses.forEach(e=>{
     totals[e.categoryId] = (totals[e.categoryId]||0) + e.amount;
     if(e.amount < 0){ credits[e.categoryId] = (credits[e.categoryId]||0) - e.amount; nCredit[e.categoryId] = (nCredit[e.categoryId]||0) + 1; }
-    else { paid[e.categoryId] = (paid[e.categoryId]||0) + e.amount; nPaid[e.categoryId] = (nPaid[e.categoryId]||0) + 1; }
+    else {
+      paid[e.categoryId] = (paid[e.categoryId]||0) + expensePaid(e); nPaid[e.categoryId] = (nPaid[e.categoryId]||0) + 1;
+      if(e.refund){
+        refunds[e.categoryId] = (refunds[e.categoryId]||0) + e.refund.amount;
+        if(e.refund.status === 'pending') refundsPending[e.categoryId] = (refundsPending[e.categoryId]||0) + e.refund.amount;
+      }
+    }
   });
   wrap.innerHTML = `<p class="hint" style="margin-top:0;">"Compressible" = une dépense sur laquelle tu as une marge de manœuvre (loisirs, nourriture…) et qui apparaît dans le simulateur d'épargne. "Fixe" = imposée (taxes, abonnements obligatoires…), exclue des curseurs du simulateur.</p>` +
     state.categories.map(c=>{
@@ -1681,7 +1872,7 @@ function renderCategoriesTab(){
       <div class="dot" style="background:${c.color}"></div>
       <div class="body">
         <div class="row1"><span class="desc">${escapeHtml(c.name)}</span><span class="amount${net<0?' credit':''}">${fmtEUR(net)}</span></div>
-        <div class="meta">${np} dépense${np===1?'':'s'} enregistrée${np===1?'':'s'}${nc>0?` · ${nc} note${nc>1?'s':''} de crédit (<span class="cr-tag">−${fmtEUR(credits[c.id])}</span>) · payé ${fmtEUR(paid[c.id]||0)}`:''}${c.builtin?' · catégorie par défaut':''}</div>
+        <div class="meta">${np} dépense${np===1?'':'s'} enregistrée${np===1?'':'s'}${(refunds[c.id]||0)>0?` · remboursements (<span class="cr-tag">−${fmtEUR(refunds[c.id])}</span>${(refundsPending[c.id]||0)>0?', dont '+fmtEUR(refundsPending[c.id])+' attendus':''})`:''}${nc>0?` · ${nc} note${nc>1?'s':''} de crédit (<span class="cr-tag">−${fmtEUR(credits[c.id])}</span>)`:''}${(nc>0||(refunds[c.id]||0)>0)?` · payé ${fmtEUR(paid[c.id]||0)}`:''}${c.builtin?' · catégorie par défaut':''}</div>
         <div class="actions">
           <button data-act="credit" data-id="${c.id}">Note de crédit</button>
           ${n>0?`<button data-act="view" data-id="${c.id}">Voir les dépenses</button>`:''}
@@ -1889,7 +2080,7 @@ function weeklyWeekBodyHtml(){
       <div class="dot" style="background:${c.color}"></div>
       <div class="body">
         <div class="row1"><span class="desc">${escapeHtml(e.description)}</span><span class="amount${e.amount<0?' credit':''}">${fmtEUR(e.amount)}</span></div>
-        <div class="meta">${fmtDateFR(e.date)} · ${escapeHtml(c.name)}${e.amount<0?' · <span class="cr-tag">note de crédit</span>':''}</div>
+        <div class="meta">${fmtDateFR(e.date)} · ${escapeHtml(c.name)}${e.amount<0?' · <span class="cr-tag">note de crédit</span>':''}${e.refund?' · payé '+fmtEUR(e.paid)+', remboursement '+(e.refund.status==='pending'?'attendu ':'reçu ')+fmtEUR(e.refund.amount):''}</div>
       </div>
     </div>`;
   }).join('');
@@ -1975,6 +2166,9 @@ function renderDashboard(){
       <div class="kpi"><div class="label">Dépenses ${dashDetailYear}</div><div class="value loss">${fmtEUR(yearExpenseTotal)}</div></div>
       <div class="kpi wide"><div class="label">Solde ${dashDetailYear}</div><div class="value ${yearNet>=0?'gain':'loss'}">${fmtEURSigned(yearNet)}</div></div>
     </div>
+    ${(()=>{ const pend = pendingRefunds(); if(!pend.length) return '';
+      const tot = pend.reduce((s,e)=> s + e.refund.amount, 0);
+      return `<p class="hint" style="margin:4px 0 6px;">Remboursements attendus, déjà déduits des dépenses : <strong>${fmtEUR(tot)}</strong> (${pend.length} en attente). <button type="button" class="linklike" id="dashPendingBtn">Voir</button></p>`; })()}
 
     <h2 class="section-title">Évolution sur plusieurs années<span class="rule"></span></h2>
     <p class="hint">Revenus et dépenses totaux, année par année.</p>
@@ -2002,6 +2196,8 @@ function renderDashboard(){
     renderDashboard();
   }));
 
+  const pb = document.getElementById('dashPendingBtn');
+  if(pb) pb.onclick = showPendingRefunds;
   fitKpiValues();
   renderCategoryYearEvolution(years);
   if(chartsAvailable()){
@@ -2641,7 +2837,7 @@ function renderDateAudit(){
   });
 }
 
-const APP_BUILD = '2026-10-30-a';
+const APP_BUILD = '2026-10-30-b';
 function setupSettings(){
   document.getElementById('buildInfo').textContent = 'Version ' + APP_BUILD + '. Si ton téléphone affiche une ancienne version après une mise à jour, ce bouton force le rechargement.';
   document.getElementById('reloadAppBtn').addEventListener('click', ()=>{
@@ -2748,9 +2944,11 @@ function csvEscape(v){
 }
 function buildCsv(rows){ const sep = csvSep(); return rows.map(r=> r.map(csvEscape).join(sep)).join('\n'); }
 function exportExpensesCSV(){
-  const rows = [['Date','Description','Catégorie','Montant']];
+  const rows = [['Date','Description','Catégorie','Montant payé','Remboursement','Statut du remboursement','Date du remboursement','Source du remboursement']];
   state.expenses.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>{
-    rows.push([e.date, e.description, catById(e.categoryId).name, csvNum(e.amount)]);
+    const rf = e.refund;
+    rows.push([e.date, e.description, catById(e.categoryId).name, csvNum(expensePaid(e)),
+      rf ? csvNum(rf.amount) : '', rf ? (rf.status === 'received' ? 'reçu' : 'attendu') : '', rf && rf.date ? rf.date : '', rf ? rf.source : '']);
   });
   offerDownload('depenses.csv', buildCsv(rows));
 }
@@ -2806,7 +3004,11 @@ const IMPORT_SPECS = {
     {k:'date',   label:'Date',        req:true, names:['date','date operation','date de l operation','date de valeur','jour']},
     {k:'desc',   label:'Description', names:['description','libelle','designation','achat','item','intitule','detail','details','objet','communication','nom']},
     {k:'amount', label:'Montant',     req:true, names:['montant','amount','prix','somme','valeur','debit','total']},
-    {k:'cat',    label:'Catégorie',   names:['categorie','category','rubrique','type']} ]},
+    {k:'cat',    label:'Catégorie',   names:['categorie','category','rubrique','type']},
+    {k:'refund', label:'Remboursement (facultatif)', names:['remboursement','montant rembourse']},
+    {k:'rstatus',label:'Statut du remboursement',    names:['statut du remboursement','statut remboursement']},
+    {k:'rdate',  label:'Date du remboursement',      names:['date du remboursement','date remboursement']},
+    {k:'rsource',label:'Source du remboursement',    names:['source du remboursement','source remboursement']} ]},
   incomes:{ label:'Revenus', fields:[
     {k:'date',   label:'Date de réception', names:['date de reception','date','reception','jour']},
     {k:'desc',   label:'Source',      names:['source','description','libelle','origine','designation','nom']},
@@ -2912,9 +3114,10 @@ function parseFlexibleDate(raw){
 
 function detectImportType(headers){
   const h = headers.map(normKey);
-  const has = (...ns)=> ns.some(n=> h.some(x=> x === n || x.indexOf(n) !== -1));
+  const has = (...ns)=> ns.some(n=> h.some(x=> x.indexOf(n) !== -1));
+  const exact = (...ns)=> ns.some(n=> h.indexOf(n) !== -1);
   if(has('mois du salaire')) return 'salary';
-  if(has('frequence', 'periodicite', 'source', 'date de reception')) return 'incomes';
+  if(has('frequence', 'periodicite') || exact('source', 'date de reception')) return 'incomes';
   return 'expenses';
 }
 function guessMapping(type, headers){
@@ -2963,7 +3166,7 @@ function buildImportPlan(type, map, data, opts){
   const items = [];
   let bad = 0, dup = 0;
   let existing = {};
-  if(type === 'expenses') existing = countMap(state.expenses.map(e=> e.date+'|'+e.description.trim().toLowerCase()+'|'+e.amount.toFixed(2)));
+  if(type === 'expenses') existing = countMap(state.expenses.map(e=> e.date+'|'+e.description.trim().toLowerCase()+'|'+expensePaid(e).toFixed(2)));
   if(type === 'incomes')  existing = countMap(state.incomes.map(i=> i.date ? 'd|'+i.date+'|'+i.label.trim().toLowerCase()+'|'+i.amount.toFixed(2) : 'l|'+i.year+'|'+i.label.trim().toLowerCase()+'|'+i.amount.toFixed(2)+'|'+i.frequency));
   if(type === 'salary')   existing = countMap(state.salaryPayments.map(p=> p.date+'|'+p.amount.toFixed(2)+'|'+(p.label||'').trim().toLowerCase()));
   const take = (key, item)=>{
@@ -2977,7 +3180,15 @@ function buildImportPlan(type, map, data, opts){
       if(!date || isNaN(amount) || amount === 0){ bad++; return; }
       if(opts.flip) amount = -amount;
       const desc = String(cell(r,'desc')||'').trim() || 'Importé';
-      take(date+'|'+desc.toLowerCase()+'|'+amount.toFixed(2), {date, amount, desc, catName:String(cell(r,'cat')||'').trim()});
+      let refund = null;
+      if(amount > 0 && map.refund >= 0){
+        const ra = parseAmount(cell(r,'refund'));
+        if(!isNaN(ra) && ra > 0){
+          const received = normKey(cell(r,'rstatus')).indexOf('rec') === 0;
+          refund = {amount:Math.min(ra, amount), status:received ? 'received' : 'pending', date:parseFlexibleDate(cell(r,'rdate')) || null, source:String(cell(r,'rsource')||'').trim()};
+        }
+      }
+      take(date+'|'+desc.toLowerCase()+'|'+amount.toFixed(2), {date, amount, desc, catName:String(cell(r,'cat')||'').trim(), refund});
     } else if(type === 'incomes'){
       const amount = parseAmount(cell(r,'amount'));
       if(isNaN(amount) || amount <= 0){ bad++; return; }
@@ -3015,7 +3226,9 @@ function executeImport(type, plan){
         }
         categoryId = ex.id;
       }
-      state.expenses.push({id:uid('exp'), date:it.date, description:it.desc, categoryId, amount:it.amount, createdAt:base+idx});
+      const e = {id:uid('exp'), date:it.date, description:it.desc, categoryId, amount:0, createdAt:base+idx};
+      setExpenseRefund(e, it.amount, it.refund);
+      state.expenses.push(e);
     });
   } else if(type === 'incomes'){
     plan.items.forEach((it, idx)=>{
@@ -3119,7 +3332,7 @@ function openCsvWizard(rows, found){
         const raw = wz.map[f.k] >= 0 ? (r[wz.map[f.k]] || '') : '';
         let v = raw;
         if(f.k === 'date'){ v = raw === '' ? '' : (parseFlexibleDate(raw) || '?'); }
-        else if(f.k === 'amount'){ const a = parseAmount(raw); v = isNaN(a) ? '?' : fmtEUR(wz.flip ? -a : a); }
+        else if(f.k === 'amount' || f.k === 'refund'){ const a = parseAmount(raw); v = raw === '' ? '' : (isNaN(a) ? '?' : fmtEUR(f.k === 'amount' && wz.flip ? -a : a)); }
         return '<td>'+escapeHtml(v)+'</td>';
       }).join('') + '</tr>';
     });
