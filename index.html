@@ -166,10 +166,19 @@
 
   label{display:block; font-size:0.78rem; color:var(--ink-soft); margin:10px 0 4px;}
   label:first-child{margin-top:0;}
-  input[type=text], input[type=number], input[type=date], select{
+  input[type=text], input[type=number], input[type=date], input[type=month], select{
     width:100%; padding:10px 11px; border:1px solid var(--line); border-radius:7px;
     background:var(--paper); color:var(--ink);
   }
+  /* Safari iPhone gives date/month fields their own intrinsic width and centres the text : force them into the card */
+  input[type=date], input[type=month]{
+    -webkit-appearance:none; appearance:none;
+    display:block; width:100%; max-width:100%; min-width:0; box-sizing:border-box; margin:0;
+    min-height:calc(1.25em + 22px); line-height:1.25; text-align:left;
+  }
+  input[type=date]::-webkit-date-and-time-value, input[type=month]::-webkit-date-and-time-value{text-align:left; min-height:1.25em; margin:0;}
+  input[type=date]::-webkit-datetime-edit, input[type=month]::-webkit-datetime-edit{padding:0;}
+  .form-row > *{min-width:0;}
   input[type=file]{width:100%; max-width:100%; min-width:0;}
   input:focus, select:focus, button:focus-visible{
     outline:2px solid var(--focus); outline-offset:1px;
@@ -432,7 +441,7 @@
   <!-- EXPENSES -->
   <section class="tab-panel" id="tab-expenses" data-tab="expenses">
     <h2 class="section-title">Nouvelle dépense<span class="rule"></span></h2>
-    <p class="hint">Une partie sera remboursée plus tard (mutualité, sécurité sociale…) ? Ouvre « Un remboursement est prévu ? » dans le formulaire. Pour un remboursement qui ne correspond à aucune dépense précise (régularisation d'une facture, par exemple), utilise « Note de crédit » dans l'onglet Catégories.</p>
+    <p class="hint">Une partie sera remboursée plus tard (mutualité, sécurité sociale…) ? Ouvre « Un remboursement est prévu ? » dans le formulaire. Pour un remboursement qui ne correspond à aucune dépense précise (régularisation d'une facture, par exemple), utilise « Note de crédit » dans l'onglet Budget.</p>
     <div class="card">
       <label for="expDate">Date</label>
       <input type="date" id="expDate">
@@ -644,6 +653,10 @@
     <p class="hint">Importe un fichier de <strong>dépenses</strong>, de <strong>revenus</strong> ou de <strong>budgets par catégorie</strong> : export de cette app, de Numbers ou d'Excel. Si le fichier contient plusieurs tableaux (par exemple un résumé de budget puis les transactions), tu choisis lequel importer. L'app devine le séparateur et le format des montants, te laisse vérifier les colonnes et ignore les lignes déjà présentes.</p>
     <div class="card">
       <input type="file" id="csvFile" accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel">
+      <div id="undoImportRow" style="display:none; margin-top:12px;">
+        <button class="btn outline block" id="undoImportBtn" type="button">Annuler le dernier remplacement</button>
+        <p class="hint" id="undoImportInfo" style="margin:6px 0 0;"></p>
+      </div>
     </div>
 
     <h2 class="section-title">Version de l'application<span class="rule"></span></h2>
@@ -917,6 +930,7 @@ function renderAll(){
 
 /* ============================= BACKUP ============================= */
 function updateBackupInfo(){
+  updateUndoRow();
   const el = document.getElementById('backupInfo');
   if(!el) return;
   const t = state.settings.lastBackup;
@@ -2413,6 +2427,20 @@ function typicalWeek(map){
   for(let w=from; w<=to; w++) vals.push(weekAgg(map, w).ordinary);
   return {median:median(vals), mean:mean(vals), n:vals.length};
 }
+// Average weekly spending since 1 January of the current year (weeks Monday→Sunday, the week of 1 January and the current week included)
+function ytdWeeklyAverage(){
+  const year = new Date().getFullYear();
+  const startIdx = weekIndex(year+'-01-01'), endIdx = weekIndex(todayISO());
+  const weeks = endIdx - startIdx + 1;
+  let ordinary = 0, exceptional = 0;
+  state.expenses.forEach(e=>{
+    const w = weekIndex(e.date);
+    if(w < startIdx || w > endIdx) return;
+    if(isExceptional(e)) exceptional += e.amount; else ordinary += e.amount;
+  });
+  return {year, weeks, avg:ordinary/weeks, avgAll:(ordinary+exceptional)/weeks, exceptional:r2(exceptional)};
+}
+
 function bigCandidates(){
   const th = state.settings.bigThreshold || 300;
   return state.expenses.filter(e=> e.amount >= th && !e.exceptional && !e.excReviewed).sort((a,b)=> b.amount - a.amount);
@@ -2532,7 +2560,9 @@ function renderWeekTab(){
   let typHtml = '';
   if(typ){
     const cmp = typ.median > 0 ? (st.ordinary - typ.median) / typ.median * 100 : null;
-    typHtml = `<div class="card"><p class="hint" style="margin:0;">Semaine typique : <strong>${fmtEUR(typ.median)}</strong> (médiane) · moyenne ${fmtEUR(typ.mean)}, sur les ${typ.n} dernières semaines complètes, dépenses exceptionnelles exclues.
+    const y = ytdWeeklyAverage();
+    typHtml = `<div class="card"><p class="hint" style="margin:0 0 8px;">Moyenne depuis le 1ᵉʳ janvier ${y.year} : <strong>${fmtEUR(y.avg)} par semaine</strong> (${y.weeks} semaines)${y.exceptional > 0 ? `, achats exceptionnels exclus ; ${fmtEUR(y.avgAll)} en les comptant` : ''}.</p>
+      <p class="hint" style="margin:0;">Semaine typique : <strong>${fmtEUR(typ.median)}</strong> (médiane) · moyenne ${fmtEUR(typ.mean)}, sur les ${typ.n} dernières semaines complètes, dépenses exceptionnelles exclues.
       ${cmp !== null && Math.abs(cmp) >= 1 ? `<br>Cette semaine-là : <strong>${cmp>0?'▲':'▼'} ${Math.abs(cmp).toFixed(0)} %</strong> par rapport à la semaine typique.` : ''}</p></div>`;
   }
   const big = bigCandidates();
@@ -3228,6 +3258,7 @@ function setupSettings(){
   fmtSel.value = csvFormat();
   fmtSel.addEventListener('change', ()=>{ state.settings.csvFormat = fmtSel.value === 'comma' ? 'comma' : 'fr'; saveState(); toast('Format enregistré.', 'ok'); });
   document.getElementById('exportJsonBtn').addEventListener('click', exportJsonBackup);
+  document.getElementById('undoImportBtn').addEventListener('click', undoLastReplace);
   document.getElementById('repairDatesBtn').addEventListener('click', ()=> repairImportedDates(false));
   document.getElementById('auditDatesBtn').addEventListener('click', openDateAuditModal);
   document.getElementById('csvFile').addEventListener('change', (ev)=>{
@@ -3519,7 +3550,7 @@ function buildImportPlan(type, map, data, opts){
   if(type === 'salary')   existing = countMap(state.incomes.filter(i=> i.salary && i.date).map(i=> i.date+'|'+i.amount.toFixed(2)+'|'+(i.label||'').trim().toLowerCase()));
   if(type === 'budgets')  existing = countMap(state.categories.filter(c=> c.budget > 0).map(c=> 'b|'+c.name.trim().toLowerCase()+'|'+c.budget.toFixed(2)));
   const take = (key, item)=>{
-    if(opts.skipDup && existing[key] > 0){ existing[key]--; dup++; return; }
+    if(opts.skipDup && !opts.replace && existing[key] > 0){ existing[key]--; dup++; return; }
     items.push(item);
   };
   data.forEach(r=>{
@@ -3573,10 +3604,51 @@ function buildImportPlan(type, map, data, opts){
       take('b|'+name.toLowerCase()+'|'+b.toFixed(2), {name, budget:r2(b), flex});
     }
   });
-  return {items, bad, dup, missing, zero, total:data.length, result:null};
+  return {items, bad, dup, missing, zero, total:data.length, result:null, replace:!!opts.replace};
+}
+const UNDO_KEY = 'grandlivre_v1_undo';
+function currentCountFor(type){
+  if(type === 'expenses') return state.expenses.length;
+  if(type === 'incomes') return state.incomes.length;
+  if(type === 'salary') return state.incomes.filter(i=> i.salary).length;
+  return state.categories.filter(c=> c.budget > 0).length;
+}
+function clearForReplace(type){
+  const n = currentCountFor(type);
+  if(type === 'expenses') state.expenses = [];
+  else if(type === 'incomes') state.incomes = [];
+  else if(type === 'salary') state.incomes = state.incomes.filter(i=> !i.salary);
+  else state.categories.forEach(c=>{ delete c.budget; });
+  return n;
+}
+function updateUndoRow(){
+  const row = document.getElementById('undoImportRow');
+  if(!row) return;
+  let snap = null;
+  try{ snap = JSON.parse(localStorage.getItem(UNDO_KEY) || 'null'); }catch(e){ snap = null; }
+  if(snap && Date.now() - snap.at > 7*86400000){ try{ localStorage.removeItem(UNDO_KEY); }catch(e){} snap = null; }   // the safety copy is kept 7 days
+  row.style.display = snap ? 'block' : 'none';
+  if(snap) document.getElementById('undoImportInfo').textContent = 'Copie de sécurité du ' + new Date(snap.at).toLocaleDateString('fr-BE', {day:'numeric', month:'long'}) + ', conservée 7 jours.';
+}
+function undoLastReplace(){
+  let snap = null;
+  try{ snap = JSON.parse(localStorage.getItem(UNDO_KEY) || 'null'); }catch(e){ snap = null; }
+  if(!snap || !snap.state){ toast('Rien à annuler.', 'err'); return false; }
+  state = snap.state;
+  saveState();
+  try{ localStorage.removeItem(UNDO_KEY); }catch(e){}
+  populateCategorySelects();
+  renderAll();
+  updateUndoRow();
+  toast('Remplacement annulé : tes données précédentes sont restaurées.', 'ok');
+  return true;
 }
 function executeImport(type, plan){
   const base = Date.now();
+  if(plan.replace){
+    try{ localStorage.setItem(UNDO_KEY, JSON.stringify({at:Date.now(), state:state})); }catch(e){ console.error(e); }
+    plan.replacedCount = clearForReplace(type);
+  }
   if(type === 'expenses'){
     plan.items.forEach((it, idx)=>{
       let categoryId = 'uncategorized';
@@ -3666,7 +3738,7 @@ function openCsvWizard(rows, tables){
   if(old) old.remove();
   let found = tables[bestTableIndex(tables)];
   let headers = rows[found.headerIdx].map(h=> String(h||'').trim());
-  const wz = {type:found.type, map:guessMapping(found.type, headers), skipDup:true, flip:false, createCats:true, done:false};
+  const wz = {type:found.type, map:guessMapping(found.type, headers), skipDup:true, flip:false, createCats:true, replace:false, armed:false, done:false};
   // bank statements list expenses as negative numbers : suggest flipping the sign when most amounts are negative
   function autoFlip(){
     const probe = guessMapping('expenses', headers);
@@ -3692,6 +3764,8 @@ function openCsvWizard(rows, tables){
     <div id="csvMap"></div>
     <label id="csvFlipRow" class="chk" style="display:none;"><input type="checkbox" id="csvFlip"><span>Inverser le signe des montants (relevé bancaire où les dépenses sont négatives)</span></label>
     <label id="csvCreateRow" class="chk" style="display:none;"><input type="checkbox" id="csvCreate" checked><span>Créer les catégories qui n'existent pas encore (elles seront « fixes » par défaut)</span></label>
+    <label class="chk"><input type="checkbox" id="csvReplace"><span><strong>Remplacer</strong> les données existantes par celles du fichier (au lieu de les compléter)</span></label>
+    <p class="hint" id="csvReplaceWarn" style="display:none; color:var(--loss);"></p>
     <label class="chk"><input type="checkbox" id="csvSkipDup" checked><span>Ignorer les lignes déjà présentes (évite les doublons si tu réimportes le même fichier)</span></label>
     <h2 class="section-title" style="margin-top:18px;">Aperçu<span class="rule"></span></h2>
     <div class="scroll-x"><table class="data" id="csvPreviewTable"></table></div>
@@ -3704,7 +3778,7 @@ function openCsvWizard(rows, tables){
   document.body.appendChild(overlay);
   const g = id=> document.getElementById(id);
   const colOptions = sel => headers.map((h,i)=> `<option value="${i}" ${i===sel?'selected':''}>${escapeHtml(h || ('Colonne '+(i+1)))}</option>`).join('') + `<option value="-1" ${sel===-1?'selected':''}>— Aucune —</option>`;
-  const planOpts = ()=> ({skipDup:wz.skipDup, flip:wz.flip, createCats:wz.createCats});
+  const planOpts = ()=> ({skipDup:wz.skipDup, flip:wz.flip, createCats:wz.createCats, replace:wz.replace});
 
   function missingRequired(){ return IMPORT_SPECS[wz.type].fields.filter(f=> f.req && !(wz.map[f.k] >= 0)); }
   function renderPreview(){
@@ -3728,6 +3802,17 @@ function openCsvWizard(rows, tables){
     });
     g('csvPreviewTable').innerHTML = html;
     g('csvConfirmImport').disabled = wz.done || miss.length > 0 || plan.items.length === 0;
+    wz.armed = false;
+    g('csvConfirmImport').textContent = wz.replace ? 'Remplacer' : 'Importer';
+    g('csvSkipDup').disabled = wz.replace;
+    const warn = g('csvReplaceWarn');
+    if(wz.replace){
+      const nOld = currentCountFor(wz.type), what = {expenses:'dépenses', incomes:'revenus', salary:'versements de salaire', budgets:'budgets'}[wz.type];
+      warn.style.display = 'block';
+      warn.textContent = plan.items.length === 0
+        ? 'Aucune ligne exploitable dans ce fichier : rien ne sera remplacé.'
+        : '⚠ Les ' + nOld + ' ' + what + ' actuels seront supprimés et remplacés par les ' + plan.items.length + ' lignes du fichier. Une copie de sécurité te permettra d\'annuler juste après.';
+    } else { warn.style.display = 'none'; warn.textContent = ''; }
     g('csvFlipRow').style.display = wz.type === 'expenses' ? 'flex' : 'none';
     g('csvCreateRow').style.display = wz.type === 'budgets' ? 'flex' : 'none';
     return plan;
@@ -3752,6 +3837,7 @@ function openCsvWizard(rows, tables){
   }
   g('csvType').addEventListener('change', ()=>{ wz.type = g('csvType').value; wz.map = guessMapping(wz.type, headers); renderMap(); });
   g('csvSkipDup').addEventListener('change', ()=>{ wz.skipDup = g('csvSkipDup').checked; renderPreview(); });
+  g('csvReplace').addEventListener('change', ()=>{ wz.replace = g('csvReplace').checked; renderPreview(); });
   g('csvFlip').addEventListener('change', ()=>{ wz.flip = g('csvFlip').checked; renderPreview(); });
   g('csvCreate').addEventListener('change', ()=>{ wz.createCats = g('csvCreate').checked; renderPreview(); });
   g('csvModalClose').addEventListener('click', ()=> overlay.remove());
@@ -3762,6 +3848,7 @@ function openCsvWizard(rows, tables){
     const miss = missingRequired();
     if(miss.length){ toast('Associe la colonne « ' + miss[0].label + ' ».', 'err'); return; }
     const plan = buildImportPlan(wz.type, wz.map, found.data, planOpts());
+    if(wz.replace && !wz.armed){ wz.armed = true; g('csvConfirmImport').textContent = 'Confirmer le remplacement ?'; return; }   // two taps to replace
     executeImport(wz.type, plan);
     wz.done = true;
     const sum = g('csvImportSummary');
@@ -3772,7 +3859,16 @@ function openCsvWizard(rows, tables){
         : n + ' ligne' + (n>1?'s':'') + ' importée' + (n>1?'s':''))
       + (plan.dup ? ', ' + plan.dup + ' doublon' + (plan.dup>1?'s':'') + ' ignoré' + (plan.dup>1?'s':'') : '')
       + (plan.bad ? ', ' + plan.bad + ' ligne' + (plan.bad>1?'s':'') + ' illisible' + (plan.bad>1?'s':'') + ' ignorée' + (plan.bad>1?'s':'') : '') + '.';
+    if(plan.replace){
+      sum.textContent = plan.replacedCount + ' ancienne' + (plan.replacedCount>1?'s':'') + ' ligne' + (plan.replacedCount>1?'s':'') + ' remplacée' + (plan.replacedCount>1?'s':'') + ' par ' + sum.textContent;
+      const undo = document.createElement('button');
+      undo.className = 'btn outline'; undo.type = 'button'; undo.style.marginTop = '8px'; undo.textContent = 'Annuler ce remplacement';
+      undo.addEventListener('click', ()=>{ if(undoLastReplace()){ undo.remove(); sum.textContent = 'Remplacement annulé : tes données précédentes sont restaurées.'; } });
+      sum.appendChild(document.createElement('br')); sum.appendChild(undo);
+      updateUndoRow();
+    }
     g('csvConfirmImport').disabled = true;
+    g('csvConfirmImport').textContent = wz.replace ? 'Remplacé' : 'Importé';
     g('csvCancelImport').textContent = 'Fermer';
     toast(n + ' ligne(s) importée(s).', 'ok');
   });
