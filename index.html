@@ -584,7 +584,14 @@
     </details>
 
     <h2 class="section-title">Revenus encodés<span class="rule"></span></h2>
-    <div class="card" id="incomesList"></div>
+    <div class="card" style="padding-bottom:12px;">
+      <label for="incSearch">Rechercher un revenu</label>
+      <input type="text" id="incSearch" enterkeyhint="search" autocomplete="off" placeholder="Source, montant, date, mois, année…">
+      <label class="chk" for="incSalOnly"><input type="checkbox" id="incSalOnly"><span>Salaires uniquement</span></label>
+      <p class="hint" id="incSearchInfo" style="display:none; margin:10px 0 0;"></p>
+      <button type="button" class="linklike" id="incSearchClear" style="display:none; margin-top:6px;">Effacer la recherche</button>
+    </div>
+    <div class="card" id="incomesList" style="margin-top:12px;"></div>
     <div id="incomesLegacyWrap"></div>
     <datalist id="incLabelList"></datalist>
   </section>
@@ -1592,6 +1599,9 @@ function setupIncomesForm(){
     editingIncomeId = null;
     resetIncomeForm();
   });
+  document.getElementById('incSearch').addEventListener('input', renderIncomesList);
+  document.getElementById('incSalOnly').addEventListener('change', renderIncomesList);
+  document.getElementById('incSearchClear').addEventListener('click', ()=>{ document.getElementById('incSearch').value = ''; renderIncomesList(); document.getElementById('incSearch').focus(); });
   document.getElementById('incSalary').addEventListener('change', updateIncSalaryUi);
   document.getElementById('incDate').addEventListener('change', updateIncSalaryUi);
   document.getElementById('incSalMonth').addEventListener('change', ()=>{ incSalMonthTouched = true; updateIncSalaryUi(); });
@@ -1650,6 +1660,8 @@ function submitIncome(){
   if(isSalary) state.settings.salary.employer = label;
   saveState();
   resetIncomeForm();
+  document.getElementById('incSearch').value = '';
+  document.getElementById('incSalOnly').checked = false;
   refreshViews();
 }
 function editIncome(id){
@@ -1704,14 +1716,36 @@ function wireIncomeButtons(root){
   root.querySelectorAll('button[data-act="edit"]').forEach(b=> b.addEventListener('click', ()=> editIncome(b.dataset.id)));
   root.querySelectorAll('button[data-act="del"]').forEach(b=> b.addEventListener('click', ()=> deleteIncomeConfirm(b.dataset.id, b)));
 }
+// Search : every word typed must appear in the source, the amount, the date (numeric or month name), the year or the « salaire » tag. Accents and case are ignored.
+function incomeHaystack(i){
+  let h = [i.label, i.year, i.salary ? 'salaire versement' : '', i.amount.toFixed(2), String(i.amount).replace('.', ',')];
+  if(i.date){ h.push(i.date, fmtDateFR(i.date), i.date.slice(8,10)+'/'+i.date.slice(5,7)+'/'+i.date.slice(0,4), monthLabelFR(i.date.slice(0,7))); }
+  else h.push(i.frequency === 'monthly' ? 'mensuel' : 'annuel', 'ancienne ligne budget');
+  return normKey(h.join(' '));
+}
 function renderIncomesList(){
   const wrap = document.getElementById('incomesList');
-  const dated = state.incomes.filter(i=> i.date)
+  const rawQ = document.getElementById('incSearch').value;
+  const tokens = normKey(rawQ).split(' ').filter(Boolean);
+  const salOnly = document.getElementById('incSalOnly').checked;
+  const filtering = tokens.length > 0 || salOnly;
+  const matches = i=> (!salOnly || i.salary) && tokens.every(t=> incomeHaystack(i).indexOf(t) !== -1);
+  const found = state.incomes.filter(matches);
+  const dated = found.filter(i=> i.date)
     .sort((a,b)=> b.date.localeCompare(a.date) || (b.createdAt||0)-(a.createdAt||0));
-  const legacy = state.incomes.filter(i=> !i.date)
+  const legacy = salOnly ? [] : found.filter(i=> !i.date)
     .sort((a,b)=> b.year-a.year || (b.createdAt||0)-(a.createdAt||0));
+  const info = document.getElementById('incSearchInfo');
+  document.getElementById('incSearchClear').style.display = rawQ.trim() ? 'inline' : 'none';
+  if(filtering){
+    const tot = found.filter(i=> !salOnly || i.salary).reduce((s,i)=> s + incomeAnnual(i), 0);
+    info.style.display = 'block';
+    info.innerHTML = found.length === 0 ? 'Aucun revenu ne correspond.' : '<strong>' + found.length + ' revenu' + (found.length>1?'s':'') + '</strong> trouvé' + (found.length>1?'s':'') + ' · total ' + fmtEUR(tot);
+  } else { info.style.display = 'none'; info.textContent = ''; }
   if(dated.length === 0){
-    wrap.innerHTML = `<div class="empty"><div class="big">Aucun revenu daté</div>Encode ta première somme reçue ci-dessus, avec sa date de réception.</div>`;
+    wrap.innerHTML = filtering
+      ? `<div class="empty"><div class="big">Aucun résultat</div>Aucun revenu daté ne correspond${tokens.length ? ' à « ' + escapeHtml(rawQ.trim()) + ' »' : ''}${salOnly ? ' (salaires uniquement)' : ''}.</div>`
+      : `<div class="empty"><div class="big">Aucun revenu daté</div>Encode ta première somme reçue ci-dessus, avec sa date de réception.</div>`;
   } else {
     wrap.innerHTML = dated.map(i=> incomeRowHtml(i, true)).join('');
     wireIncomeButtons(wrap);
