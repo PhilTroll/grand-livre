@@ -3,14 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Grand Livre">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#F5EDE0" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1F1612" media="(prefers-color-scheme: dark)">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" type="image/png" href="apple-touch-icon.png">
 <title>Grand Livre — Budget &amp; Épargne</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -58,7 +50,7 @@
     background:var(--paper); color:var(--ink);
     font-family:var(--font-body); font-size:15px; line-height:1.5;
     -webkit-font-smoothing:antialiased;
-    padding-bottom:78px;
+    padding-bottom:140px;
     min-height:100vh;
   }
   a{color:inherit;}
@@ -380,6 +372,33 @@
   .refund-line.pending{color:var(--brass);}
   .refund-line.pending.late{color:var(--loss); font-weight:600;}
   .refund-line.received{color:var(--ink-soft);}
+  #weekHero{max-width:none; margin-top:4px;}
+  #weekHero .wh-weeknav{margin-bottom:10px;}
+  .week-body{display:flex; flex-direction:column; gap:2px;}
+  .week-big{font-family:var(--font-mono); font-weight:700; font-size:1.9rem; font-variant-numeric:tabular-nums; line-height:1.15;}
+  .week-bar{height:9px; border-radius:6px; background:rgba(255,255,255,0.28); overflow:hidden; margin:8px 0 4px;}
+  .week-bar > div{height:100%; border-radius:6px; background:#fff;}
+  .week-bar.over > div{background:#FFD9D2;}
+  .fab{
+    position:fixed; right:max(16px, env(safe-area-inset-right)); bottom:calc(74px + env(safe-area-inset-bottom));
+    width:54px; height:54px; border-radius:50%; border:none; background:var(--vault); color:var(--on-vault);
+    box-shadow:0 6px 18px rgba(0,0,0,0.28); z-index:18; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;
+  }
+  .fab svg{width:26px; height:26px;}
+  .fab:active{transform:scale(0.96);}
+  .chk{display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:0.82rem; color:var(--ink); cursor:pointer;}
+  .chk input{margin-top:3px; flex-shrink:0;}
+  .exc-tag{color:var(--brass); font-weight:600;}
+  .over-tag{color:var(--loss); font-weight:600;}
+  .bud-bar{position:relative; height:8px; border-radius:5px; background:var(--paper-alt); overflow:hidden; margin:7px 0 5px;}
+  .bud-fill{height:100%; border-radius:5px;}
+  .bud-fill.ok{background:var(--gain);} .bud-fill.warn{background:var(--brass);} .bud-fill.over{background:var(--loss);}
+  .bud-tick{position:absolute; top:0; bottom:0; width:2px; background:var(--ink); opacity:0.55;}
+  .bud-of{color:var(--ink-soft); font-weight:500; font-size:0.78rem;}
+  .qa-chips{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px;}
+  .qa-chip{border:1px solid var(--line); background:var(--card); border-radius:16px; padding:7px 12px; font-size:0.82rem; cursor:pointer; color:var(--ink);}
+  .qa-chip.on{background:var(--vault); border-color:var(--vault); color:var(--on-vault);}
+  .qa-chip.sugg:not(.on){border-color:var(--vault); color:var(--vault);}
 </style>
 </head>
 <body>
@@ -390,12 +409,19 @@
   <div class="brand">
     <h1>Grand Livre</h1>
     <div class="tag">Dépenses, revenus &amp; épargne</div>
-    <div class="weekly-highlight empty" id="weeklyHighlight">Encode tes dépenses pour voir ta moyenne hebdomadaire ici.</div>
   </div>
   <button class="theme-toggle" id="themeToggle" type="button">Thème</button>
 </header>
 
 <div class="shell">
+
+  <!-- WEEK -->
+  <section class="tab-panel" id="tab-week" data-tab="week">
+    <div id="weekBanners"></div>
+    <div class="weekly-highlight" id="weekHero"></div>
+    <div id="weekKpis"></div>
+    <div id="weekExtras"></div>
+  </section>
 
   <!-- DASHBOARD -->
   <section class="tab-panel" id="tab-dashboard" data-tab="dashboard">
@@ -411,7 +437,7 @@
       <label for="expDate">Date</label>
       <input type="date" id="expDate">
       <label for="expDesc">Description</label>
-      <input type="text" id="expDesc" placeholder="Ex. Forfait internet, courses, restaurant…">
+      <input type="text" id="expDesc" list="descList" autocomplete="off" placeholder="Ex. Forfait internet, courses, restaurant…">
       <div class="form-row">
         <div>
           <label for="expCat">Catégorie</label>
@@ -419,16 +445,17 @@
         </div>
         <div>
           <label for="expAmount">Montant payé (€)</label>
-          <input type="number" id="expAmount" step="0.01" min="0" placeholder="0.00">
+          <input type="number" id="expAmount" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
         </div>
       </div>
+      <p class="hint" id="expCatHint" style="display:none; margin:6px 0 0;"></p>
       <details id="expRefundBox" class="refund-box">
         <summary>Un remboursement est prévu ? (facultatif)</summary>
         <p class="hint" style="margin:8px 0 0;">C'est la somme réellement payée (montant payé moins remboursement) qui compte dans toutes les statistiques, même si le remboursement n'est pas encore arrivé.</p>
         <div class="form-row">
           <div>
             <label for="expRefAmount">Remboursement (€)</label>
-            <input type="number" id="expRefAmount" step="0.01" min="0" placeholder="0.00">
+            <input type="number" id="expRefAmount" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
           </div>
           <div>
             <label for="expRefStatus">Statut</label>
@@ -450,6 +477,8 @@
         </div>
         <p class="hint" id="expRefPreview" style="margin:8px 0 0;"></p>
       </details>
+      <label class="chk" for="expExceptional"><input type="checkbox" id="expExceptional"><span>Dépense exceptionnelle (gros achat ponctuel) : exclue du contrôle hebdomadaire, mais comptée dans le budget et dans l'année.</span></label>
+      <p class="hint" id="expExcHint" style="display:none; margin:6px 0 0;"></p>
       <div class="btn-row">
         <button class="btn" id="expSubmit" type="button">Ajouter la dépense</button>
         <button class="btn secondary" id="expCancelEdit" type="button" style="display:none;">Annuler</button>
@@ -491,24 +520,26 @@
       <div id="expTotalsBody"></div>
     </details>
     <div class="card" id="expensesList"></div>
+    <div id="expMore" style="margin-top:10px;"></div>
   </section>
 
   <!-- INCOMES -->
   <section class="tab-panel" id="tab-incomes" data-tab="incomes">
-    <div class="year-pills" id="incSubPills" style="margin-top:4px;">
-      <div class="pill active" data-sub="budget">Budget annuel</div>
-      <div class="pill" data-sub="salary">Contrôle du salaire</div>
-    </div>
-    <div id="incBudgetPane">
     <h2 class="section-title">Nouveau revenu<span class="rule"></span></h2>
-    <p class="hint">Encode chaque somme reçue, le jour où tu la reçois : salaire, prime, remboursement, allocation… Elle compte une seule fois, dans le mois de sa date. Pour comparer chaque versement de salaire à ce que tu dois recevoir, va dans <button type="button" class="linklike" id="goSalaryCheck">Contrôle du salaire</button>.</p>
+    <p class="hint">Encode chaque somme reçue, le jour où tu la reçois : salaire, prime, remboursement, allocation… Elle compte une seule fois, dans le mois de sa date. Pour un salaire, coche « versement de salaire » : il alimente automatiquement le contrôle ci-dessous.</p>
     <div class="card">
       <label for="incDate">Date de réception</label>
       <input type="date" id="incDate">
       <label for="incLabel">Source</label>
-      <input type="text" id="incLabel" placeholder="Ex. Salaire, prime, remboursement…">
+      <input type="text" id="incLabel" list="incLabelList" autocomplete="off" placeholder="Ex. Salaire, prime, remboursement…">
       <label for="incAmount">Montant (€)</label>
-      <input type="number" id="incAmount" step="0.01" min="0" placeholder="0.00">
+      <input type="number" id="incAmount" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+      <label class="chk" for="incSalary"><input type="checkbox" id="incSalary"><span>Versement de salaire (contrôlé chaque mois)</span></label>
+      <div id="incSalMonthWrap" style="display:none;">
+        <label for="incSalMonth">Salaire du mois de</label>
+        <input type="month" id="incSalMonth">
+        <p class="hint" id="incSalMonthHint" style="margin:8px 0 0;"></p>
+      </div>
       <p class="hint" id="incLegacyHint" style="display:none; margin:10px 0 0;"></p>
       <div class="btn-row">
         <button class="btn" id="incSubmit" type="button">Ajouter le revenu</button>
@@ -516,49 +547,23 @@
       </div>
     </div>
 
-    <h2 class="section-title">Revenus encodés<span class="rule"></span></h2>
-    <div class="card" id="incomesList"></div>
-    <div id="incomesLegacyWrap"></div>
-    </div><!-- /incBudgetPane -->
-
-    <div id="incSalaryPane" style="display:none;">
-      <h2 class="section-title">Salaire reçu : contrôle<span class="rule"></span></h2>
-      <p class="hint">Encode chaque versement de ton salaire (il arrive en deux fois). L'app regroupe les deux versements d'un même salaire et compare le total au salaire attendu, avec une tolérance.</p>
+    <details class="card" id="salaryDetails" style="margin-top:12px;">
+      <summary id="salaryLine">Contrôle du salaire</summary>
+      <p class="hint" style="margin:0 0 10px;">Les deux versements d'un même salaire sont regroupés et comparés au salaire attendu, avec une tolérance.</p>
       <div id="salarySummary"></div>
-
-      <h2 class="section-title">Nouveau versement<span class="rule"></span></h2>
-      <div class="card">
-        <div class="form-row">
-          <div><label for="salDate">Date du versement</label><input type="date" id="salDate"></div>
-          <div><label for="salAmount">Montant (€)</label><input type="number" id="salAmount" step="0.01" min="0" placeholder="0.00"></div>
-        </div>
-        <div class="form-row">
-          <div><label for="salLabel">Source</label><input type="text" id="salLabel" placeholder="Employeur"></div>
-          <div><label for="salMonth">Salaire du mois de</label><input type="month" id="salMonth"></div>
-        </div>
-        <p class="hint" id="salMonthHint" style="margin:8px 0 0;"></p>
-        <div class="btn-row">
-          <button class="btn" id="salSubmit" type="button">Ajouter le versement</button>
-          <button class="btn secondary" id="salCancelEdit" type="button" style="display:none;">Annuler</button>
-        </div>
-      </div>
-
-      <h2 class="section-title">Contrôle mois par mois<span class="rule"></span></h2>
       <div id="salaryMonths"></div>
-
-      <h2 class="section-title">Réglages du contrôle<span class="rule"></span></h2>
-      <details class="card" id="salSettings">
+      <details class="card" id="salSettings" style="margin-top:10px;">
         <summary>Salaire attendu, tolérance et rattachement des versements</summary>
         <div class="form-row">
-          <div><label for="salExpAmount">Salaire net attendu (€ / mois)</label><input type="number" id="salExpAmount" step="0.01" min="0" placeholder="Ex. 2450"></div>
+          <div><label for="salExpAmount">Salaire net attendu (€ / mois)</label><input type="number" id="salExpAmount" inputmode="decimal" step="0.01" min="0" placeholder="Ex. 2450"></div>
           <div><label for="salExpFrom">À partir du mois</label><input type="month" id="salExpFrom"></div>
         </div>
         <p class="hint" style="margin:8px 0 0;">Somme des deux versements que tu dois normalement recevoir. Si ton salaire change, ajoute un nouveau montant avec son mois de départ : les mois passés gardent l'ancien.</p>
         <button class="btn" id="salExpSave" type="button">Enregistrer ce montant</button>
         <div id="salRulesList"></div>
         <div class="form-row" style="margin-top:16px;">
-          <div><label for="salTol">Tolérance normale (± €)</label><input type="number" id="salTol" step="1" min="0"></div>
-          <div><label for="salAlert">Seuil d'alerte (± €)</label><input type="number" id="salAlert" step="1" min="0"></div>
+          <div><label for="salTol">Tolérance normale (± €)</label><input type="number" id="salTol" inputmode="decimal" step="1" min="0"></div>
+          <div><label for="salAlert">Seuil d'alerte (± €)</label><input type="number" id="salAlert" inputmode="decimal" step="1" min="0"></div>
         </div>
         <label for="salMonthRule">À quel mois appartient un salaire versé en deux fois ?</label>
         <select id="salMonthRule">
@@ -567,13 +572,21 @@
         </select>
         <button class="btn secondary" id="salSaveParams" type="button">Enregistrer les réglages</button>
       </details>
-    </div>
+    </details>
+
+    <h2 class="section-title">Revenus encodés<span class="rule"></span></h2>
+    <div class="card" id="incomesList"></div>
+    <div id="incomesLegacyWrap"></div>
+    <datalist id="incLabelList"></datalist>
   </section>
 
-  <!-- CATEGORIES -->
+  <!-- BUDGET (categories + budgets) -->
   <section class="tab-panel" id="tab-categories" data-tab="categories">
-    <h2 class="section-title">Nouvelle catégorie<span class="rule"></span></h2>
-    <div class="card">
+    <div class="year-pills" id="budgetYearPills" style="margin-top:4px;"></div>
+    <div id="budgetTop"></div>
+    <div id="budgetLists"></div>
+    <details class="card" id="catNewBox" style="margin-top:14px;">
+      <summary id="catNewTitle">Nouvelle catégorie</summary>
       <label for="catName">Nom</label>
       <input type="text" id="catName" placeholder="Ex. Abonnements, Santé, Loisirs…">
       <label>Couleur</label>
@@ -582,57 +595,19 @@
         <button class="btn" id="catSubmit" type="button">Créer la catégorie</button>
         <button class="btn secondary" id="catCancelEdit" type="button" style="display:none;">Annuler</button>
       </div>
-    </div>
-    <h2 class="section-title">Catégories<span class="rule"></span></h2>
-    <div class="card" id="categoriesList"></div>
-  </section>
-
-  <!-- SIMULATOR -->
-  <section class="tab-panel" id="tab-sim" data-tab="sim">
-    <div id="simContent"></div>
+    </details>
+    <h2 class="section-title">Projection de ton épargne cumulée<span class="rule"></span></h2>
+    <p class="hint">Ton solde de référence (Réglages) est celui d'aujourd'hui. Les mois passés sont recalculés à rebours à partir de ce point avec tes flux réels, puis la tendance est prolongée sur 12 mois avec une fourchette d'incertitude.</p>
+    <div class="card"><div class="chart-wrap tall"><canvas id="chartProjection"></canvas></div></div>
+    <div id="projectionNote"></div>
   </section>
 
   <!-- SETTINGS / IMPORT-EXPORT -->
   <section class="tab-panel" id="tab-settings" data-tab="settings">
-    <h2 class="section-title">Solde de référence<span class="rule"></span></h2>
-    <p class="hint">Optionnel : indique ton solde bancaire actuel pour que la projection d'épargne parte d'une base réelle plutôt que de zéro.</p>
+    <h2 class="section-title">Sauvegarde<span class="rule"></span></h2>
+    <p class="hint">Tes données ne sont stockées que sur cet appareil. Une sauvegarde complète (catégories, budgets, dépenses, revenus) te permet de les retrouver ou de les copier sur un autre appareil.</p>
     <div class="card">
-      <label for="startBalance">Solde actuel (€)</label>
-      <input type="number" id="startBalance" step="0.01">
-      <button class="btn" id="saveBalance" type="button">Enregistrer</button>
-    </div>
-
-    <h2 class="section-title">Exporter en CSV<span class="rule"></span></h2>
-    <p class="hint">Génère un fichier CSV lisible dans Numbers, Excel ou Google Sheets. Le CSV sert à échanger avec un tableur ; pour copier toutes tes données d'un appareil à l'autre, utilise plutôt la sauvegarde complète plus bas.</p>
-    <div class="card">
-      <label for="csvFormatSel">Format du fichier</label>
-      <select id="csvFormatSel">
-        <option value="fr">Point-virgule et virgule décimale (Numbers et Excel en français)</option>
-        <option value="comma">Virgule et point décimal (Google Sheets, anglais)</option>
-      </select>
-      <div class="btn-row">
-        <button class="btn outline" id="exportExpBtn" type="button">Exporter les dépenses</button>
-        <button class="btn outline" id="exportIncBtn" type="button">Exporter les revenus</button>
-        <button class="btn outline" id="exportSalBtn" type="button">Exporter les versements de salaire</button>
-      </div>
-    </div>
-
-    <h2 class="section-title">Importer un CSV<span class="rule"></span></h2>
-    <p class="hint">Importe un fichier de <strong>dépenses</strong>, de <strong>revenus</strong> ou de <strong>versements de salaire</strong> : export de cette app, de Numbers ou d'Excel. L'app retrouve le tableau même s'il est précédé d'un titre ou d'un tableau de résumé, devine le séparateur et le format des montants, te laisse vérifier les colonnes et ignore les lignes déjà présentes. Un montant négatif de dépense est importé comme une note de crédit.</p>
-    <div class="card">
-      <input type="file" id="csvFile" accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel">
-    </div>
-
-    <h2 class="section-title">Vérifier les dates importées<span class="rule"></span></h2>
-    <p class="hint">Un bug de conversion (jour/mois inversés) affectait certaines dates issues d'un import CSV ; il est corrigé, et tes données existantes ont été réparées automatiquement. Utilise ce bouton si tu importes à nouveau un fichier ancien ou si une date te semble encore incorrecte.</p>
-    <div class="card">
-      <button class="btn outline block" id="repairDatesBtn" type="button">Vérifier et corriger les dates</button>
-      <button class="btn outline block" id="auditDatesBtn" type="button" style="margin-top:8px;">Chercher les dates suspectes (jour/mois inversés)</button>
-    </div>
-
-    <h2 class="section-title">Sauvegarde complète<span class="rule"></span></h2>
-    <p class="hint">Une sauvegarde JSON de toutes tes données (catégories, dépenses, revenus), à conserver ou réimporter en cas de besoin.</p>
-    <div class="card">
+      <p class="hint" id="backupInfo" style="margin:0 0 4px;"></p>
       <div class="btn-row">
         <button class="btn outline" id="exportJsonBtn" type="button">Exporter la sauvegarde</button>
         <label class="btn secondary" style="margin:0; cursor:pointer;">
@@ -642,24 +617,57 @@
       </div>
     </div>
 
-    <h2 class="section-title">Zone sensible<span class="rule"></span></h2>
+    <h2 class="section-title">Solde de référence<span class="rule"></span></h2>
+    <p class="hint">Optionnel : indique ton solde bancaire actuel pour que la projection d'épargne parte d'une base réelle plutôt que de zéro.</p>
     <div class="card">
-      <button class="btn danger block" id="resetAllBtn" type="button">Réinitialiser toutes les données</button>
+      <label for="startBalance">Solde actuel (€)</label>
+      <input type="number" id="startBalance" inputmode="decimal" step="0.01">
+      <button class="btn" id="saveBalance" type="button">Enregistrer</button>
     </div>
+
+    <h2 class="section-title">Exporter en CSV<span class="rule"></span></h2>
+    <p class="hint">Génère un fichier CSV lisible dans Numbers, Excel ou Google Sheets. Le CSV sert à échanger avec un tableur ; pour copier toutes tes données d'un appareil à l'autre, utilise plutôt la sauvegarde complète.</p>
+    <div class="card">
+      <label for="csvFormatSel">Format du fichier</label>
+      <select id="csvFormatSel">
+        <option value="fr">Point-virgule et virgule décimale (Numbers et Excel en français)</option>
+        <option value="comma">Virgule et point décimal (Google Sheets, anglais)</option>
+      </select>
+      <div class="btn-row">
+        <button class="btn outline" id="exportExpBtn" type="button">Exporter les dépenses</button>
+        <button class="btn outline" id="exportIncBtn" type="button">Exporter les revenus</button>
+        <button class="btn outline" id="exportBudBtn" type="button">Exporter les budgets</button>
+      </div>
+    </div>
+
+    <h2 class="section-title">Importer un CSV<span class="rule"></span></h2>
+    <p class="hint">Importe un fichier de <strong>dépenses</strong>, de <strong>revenus</strong> ou de <strong>budgets par catégorie</strong> : export de cette app, de Numbers ou d'Excel. Si le fichier contient plusieurs tableaux (par exemple un résumé de budget puis les transactions), tu choisis lequel importer. L'app devine le séparateur et le format des montants, te laisse vérifier les colonnes et ignore les lignes déjà présentes.</p>
+    <div class="card">
+      <input type="file" id="csvFile" accept=".csv,.txt,text/csv,text/plain,application/vnd.ms-excel">
+    </div>
+
     <h2 class="section-title">Version de l'application<span class="rule"></span></h2>
     <div class="card">
       <p class="hint" id="buildInfo" style="margin:0;"></p>
       <button class="btn outline block" id="reloadAppBtn" type="button">Recharger la dernière version</button>
     </div>
+
+    <details class="card" id="advancedTools" style="margin-top:14px;">
+      <summary>Outils avancés</summary>
+      <p class="hint" style="margin:0 0 8px;">Réparation de dates après un ancien import, et remise à zéro. Tu n'en as normalement pas besoin.</p>
+      <button class="btn outline block" id="repairDatesBtn" type="button">Vérifier et corriger les dates importées</button>
+      <button class="btn outline block" id="auditDatesBtn" type="button" style="margin-top:8px;">Chercher les dates suspectes (jour/mois inversés)</button>
+      <button class="btn danger block" id="resetAllBtn" type="button" style="margin-top:16px;">Réinitialiser toutes les données</button>
+    </details>
     <footer class="note">Toutes les données restent stockées localement, dans ton navigateur, sur cet appareil.</footer>
   </section>
 
 </div>
 
 <nav class="bottom" id="bottomNav">
-  <button data-tab="dashboard" type="button">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 13h4v8H3zM10 8h4v13h-4zM17 3h4v18h-4z"/></svg>
-    <span class="lbl">Tableau</span>
+  <button data-tab="week" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+    <span class="lbl">Semaine</span>
   </button>
   <button data-tab="expenses" type="button">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 12h16M4 6h16M4 18h10"/></svg>
@@ -670,18 +678,23 @@
     <span class="lbl">Revenus</span>
   </button>
   <button data-tab="categories" type="button">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="4"/><circle cx="16" cy="16" r="4"/></svg>
-    <span class="lbl">Catégories</span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+    <span class="lbl">Budget</span>
   </button>
-  <button data-tab="sim" type="button">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20l5-9 4 5 7-11"/></svg>
-    <span class="lbl">Simuler</span>
+  <button data-tab="dashboard" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 13h4v8H3zM10 8h4v13h-4zM17 3h4v18h-4z"/></svg>
+    <span class="lbl">Année</span>
   </button>
   <button data-tab="settings" type="button">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 00-.15-1.45l2-1.55-2-3.46-2.36.95a7 7 0 00-1.26-.73L15 3h-4l-.23 2.76a7 7 0 00-1.26.73l-2.36-.95-2 3.46 2 1.55A7 7 0 005 12a7 7 0 00.15 1.45l-2 1.55 2 3.46 2.36-.95c.39.3.81.54 1.26.73L9 21h4l.23-2.76c.45-.19.87-.43 1.26-.73l2.36.95 2-3.46-2-1.55c.1-.47.15-.96.15-1.45z"/></svg>
     <span class="lbl">Réglages</span>
   </button>
 </nav>
+
+<button class="fab" id="fabAdd" type="button" aria-label="Ajouter une dépense">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+<datalist id="descList"></datalist>
 
 <script>
 (function(){
@@ -705,7 +718,7 @@ function defaultState(){
     expenses:[],
     incomes:[],
     salaryPayments:[],
-    settings:{ startingBalance:0, theme:'auto', salary:salaryDefaults() }
+    settings:{ startingBalance:0, theme:'auto', salary:salaryDefaults(), weekly:{manualTarget:null}, bigThreshold:300 }
   };
 }
 
@@ -714,11 +727,9 @@ let editingExpenseId = null;
 let editingIncomeId = null;
 let editingCategoryId = null;
 let selectedSwatch = PALETTE[0];
-let currentTab = 'dashboard';
+let currentTab = 'week';
 let downloadsCap = null;
 let charts = {};
-let simCapDraftMap = {};
-let simGoal = null;
 let dashRangeYears = null; // [minYear,maxYear] or null = all
 let dashDetailYear = null;
 
@@ -736,6 +747,7 @@ function loadState(){
       parsed.expenses.forEach((e,idx)=>{ if(e.createdAt===undefined) e.createdAt = idx; });
     }
     normalizeSalaryState(parsed);
+    normalizeV2State(parsed);
     return parsed;
   }catch(e){
     console.error('loadState failed', e);
@@ -787,6 +799,36 @@ function setExpenseRefund(e, paid, refund){
   e.amount = r2(paid - a);
 }
 function pendingRefunds(){ return state.expenses.filter(e=> e.refund && e.refund.status === 'pending'); }
+// ---- v2 : weekly control, budgets, exceptional purchases ---------------------------------------
+// category.budget = annual budget (€) · expense.exceptional = one-off purchase left out of the weekly control
+// income.salary = receipt that is a salary payment (feeds « Contrôle du salaire ») · income.salaryMonth = manual salary month
+function isExceptional(e){ return !!e.exceptional && e.amount >= 0; }
+function categoryBudget(c){ return (c && c.budget > 0) ? c.budget : 0; }
+function median(arr){
+  if(!arr.length) return 0;
+  const a = arr.slice().sort((x,y)=> x-y), m = Math.floor(a.length/2);
+  return a.length % 2 ? a[m] : (a[m-1] + a[m]) / 2;
+}
+function normalizeV2State(st){
+  if(!st.settings) st.settings = {startingBalance:0, theme:'auto'};
+  const s = st.settings;
+  if(!s.weekly || typeof s.weekly !== 'object') s.weekly = {manualTarget:null};
+  if(!(s.bigThreshold > 0)) s.bigThreshold = 300;
+  // one single place for revenues : former salary payments become dated revenues flagged « salary »
+  if(Array.isArray(st.salaryPayments) && st.salaryPayments.length){
+    if(!Array.isArray(st.incomes)) st.incomes = [];
+    st.salaryPayments.forEach(p=>{
+      if(!p || !p.date) return;
+      const dup = st.incomes.find(i=> i.date === p.date && Math.abs(i.amount - p.amount) < 0.005);
+      if(dup){ dup.salary = true; if(p.monthManual) dup.salaryMonth = p.monthManual; }
+      else st.incomes.push({id:uid('inc'), year:parseInt(String(p.date).slice(0,4),10), frequency:'once',
+        label:p.label || (s.salary && s.salary.employer) || 'Salaire', amount:p.amount, date:p.date,
+        salary:true, salaryMonth:p.monthManual || null, createdAt:p.createdAt || Date.now()});
+    });
+    st.salaryPayments = [];
+  }
+  return st;
+}
 function incomeAnnual(inc){ return inc.frequency==='monthly' ? inc.amount*12 : inc.amount; }
 
 function allYearsInData(){
@@ -823,6 +865,7 @@ function setupNav(){
     btn.addEventListener('click', ()=> switchTab(btn.getAttribute('data-tab')));
   });
   document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+  document.getElementById('fabAdd').addEventListener('click', openQuickAdd);
   const savedTheme = state.settings.theme;
   if(savedTheme==='light' || savedTheme==='dark'){
     document.documentElement.setAttribute('data-theme', savedTheme);
@@ -840,16 +883,134 @@ function toggleTheme(){
   saveState();
   renderAll();
 }
+
+/* ============================= VIEWS / NAVIGATION ============================= */
+// Re-draws only what the user is looking at (every tab is drawn again when it is opened).
+function refreshViews(){
+  rebuildDescList();
+  if(currentTab === 'week') renderWeekTab();
+  else if(currentTab === 'dashboard') renderDashboard();
+  else if(currentTab === 'expenses'){ refreshYearFilters(); renderExpensesList(); }
+  else if(currentTab === 'incomes') renderIncomesTab();
+  else if(currentTab === 'categories') renderCategoriesTab();
+}
+function afterDateChange(){
+  saveState();
+  refreshViews();
+}
 function switchTab(tab){
   currentTab = tab;
   document.querySelectorAll('.tab-panel').forEach(p=> p.classList.toggle('active', p.getAttribute('data-tab')===tab));
   document.querySelectorAll('nav.bottom button').forEach(b=> b.classList.toggle('active', b.getAttribute('data-tab')===tab));
   window.scrollTo(0,0);
+  if(tab==='week') renderWeekTab();
   if(tab==='dashboard') renderDashboard();
-  if(tab==='sim') renderSimulator();
   if(tab==='expenses') renderExpensesTab();
   if(tab==='incomes') renderIncomesTab();
   if(tab==='categories') renderCategoriesTab();
+  if(tab==='settings') updateBackupInfo();
+}
+function renderAll(){
+  populateCategorySelects();
+  refreshViews();
+}
+
+/* ============================= BACKUP ============================= */
+function updateBackupInfo(){
+  const el = document.getElementById('backupInfo');
+  if(!el) return;
+  const t = state.settings.lastBackup;
+  if(!t){ el.textContent = "Aucune sauvegarde pour l'instant."; return; }
+  const d = backupDaysAgo();
+  el.textContent = 'Dernière sauvegarde : le ' + new Date(t).toLocaleDateString('fr-BE', {day:'numeric', month:'long', year:'numeric'})
+    + (d === 0 ? " (aujourd'hui)" : ' (il y a ' + d + ' jour' + (d>1?'s':'') + ')') + '.';
+}
+async function exportJsonBackup(){
+  const ok = await offerDownload('grand-livre-sauvegarde.json', JSON.stringify(state, null, 2));
+  if(ok){
+    state.settings.lastBackup = Date.now();
+    state.settings.backupSnoozeUntil = null;
+    saveState();
+    updateBackupInfo();
+    if(currentTab === 'week') renderWeekTab();
+  }
+}
+// Used when the page runs outside Claude (e.g. GitHub Pages): iPhone/iPad → native share sheet ("Enregistrer dans Fichiers",
+// also works from a Home Screen app); everywhere else → classic download. No await before navigator.share (needs the tap).
+async function fallbackDownload(filename, text){
+  const isCsv = /\.csv$/i.test(filename);
+  const mime = isCsv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8';
+  const blob = new Blob([isCsv ? '\ufeff' + text : text], {type:mime});     // BOM so Numbers/Excel read the accents
+  if(isIOSDevice() && typeof File === 'function' && navigator.canShare && navigator.share){
+    try{
+      const file = new File([blob], filename, {type:mime});
+      if(navigator.canShare({files:[file]})){
+        await navigator.share({files:[file], title:filename});
+        toast('Fichier exporté.', 'ok');
+        return true;
+      }
+    }catch(e){
+      if(e && e.name === 'AbortError') return false;          // the user closed the share sheet
+    }
+  }
+  try{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.style.display = 'none';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=> URL.revokeObjectURL(url), 5000);
+    toast('Fichier téléchargé.', 'ok');
+    return true;
+  }catch(e){
+    console.error(e);
+    toast("L'export a échoué.", 'err');
+    return false;
+  }
+}
+async function offerDownload(filename, text){
+  if(!downloadsCap){ return fallbackDownload(filename, text); }
+  try{
+    await downloadsCap.save({filename, data:text});
+    toast('Fichier enregistré.', 'ok');
+    return true;
+  }catch(e){
+    if(e && e.code==='declined'){ /* user cancelled, no toast needed */ }
+    else { console.error(e); toast("L'export a échoué.", 'err'); }
+    return false;
+  }
+}
+function exportBudgetsCSV(){
+  const rows = [['Catégorie','Budget annuel','Compressible']];
+  state.categories.filter(c=> c.budget > 0).forEach(c=>{
+    rows.push([c.name, csvNum(c.budget), c.flexible !== false ? 'oui' : 'non']);
+  });
+  if(rows.length === 1){ toast("Aucun budget à exporter : fixes-en dans l'onglet Budget.", 'err'); return; }
+  offerDownload('budgets.csv', buildCsv(rows));
+}
+
+/* ============================= SALARY CONTROL (fed by the revenues flagged « salary ») ============================= */
+function salaryPaymentsView(){
+  return state.incomes.filter(i=> i.salary && i.date).map(i=> ({id:i.id, date:i.date, amount:i.amount, label:i.label, monthManual:i.salaryMonth || null}));
+}
+function renderSalaryPane(){
+  renderSalaryMonths();
+  const line = document.getElementById('salaryLine');
+  if(!line) return;
+  const months = salaryMonthsData();
+  const badge = {ok:'✓ Conforme', warn:'⚠ À surveiller', bad:'❌ À vérifier', pending:'⏳ En attente'};
+  let txt = 'Contrôle du salaire';
+  if(!months.length) txt += ' · aucun salaire encodé';
+  else if(state.settings.salary.rules.length === 0) txt += ' · à configurer';
+  else {
+    const last = months.slice().reverse().find(m=> badge[m.status.code]);
+    if(last) txt += ' · ' + monthLabelFR(last.key).toLowerCase() + ' : ' + badge[last.status.code];
+  }
+  line.textContent = txt;
+}
+function setupSalary(){
+  document.getElementById('salExpSave').addEventListener('click', saveSalaryRule);
+  document.getElementById('salSaveParams').addEventListener('click', saveSalaryParams);
+  fillSalarySettings();
 }
 
 /* ============================= CATEGORY SELECTS ============================= */
@@ -876,6 +1037,10 @@ function setupExpensesForm(){
   document.getElementById('expSearch').addEventListener('input', renderExpensesList);
   document.getElementById('expSort').addEventListener('change', renderExpensesList);
   document.getElementById('expPendingOnly').addEventListener('change', renderExpensesList);
+  document.getElementById('expDesc').addEventListener('input', updateCatSuggestion);
+  document.getElementById('expCat').addEventListener('change', ()=>{ expCatTouched = true; document.getElementById('expCatHint').style.display = 'none'; });
+  document.getElementById('expAmount').addEventListener('input', updateExcHint);
+  document.getElementById('expExceptional').addEventListener('change', updateExcHint);
   ['expAmount','expRefAmount','expRefStatus'].forEach(id=>{
     document.getElementById(id).addEventListener('input', updateRefundUi);
     document.getElementById(id).addEventListener('change', updateRefundUi);
@@ -906,7 +1071,11 @@ function resetExpenseForm(){
   document.getElementById('expRefDate').value = '';
   document.getElementById('expRefSource').value = '';
   document.getElementById('expRefundBox').open = false;
+  document.getElementById('expExceptional').checked = false;
+  expCatTouched = false;
+  document.getElementById('expCatHint').style.display = 'none';
   updateRefundUi();
+  updateExcHint();
   document.getElementById('expSubmit').textContent = 'Ajouter la dépense';
   document.getElementById('expCancelEdit').style.display = 'none';
 }
@@ -928,23 +1097,22 @@ function submitExpense(){
     if(status === 'received' && !rdate){ toast('Indique la date de réception du remboursement.', 'err'); return; }
     refund = {amount:refAmt, status, date:rdate, source:document.getElementById('expRefSource').value};
   }
+  const exceptional = document.getElementById('expExceptional').checked;
   if(editingExpenseId){
     const e = state.expenses.find(x=>x.id===editingExpenseId);
-    if(e){ e.date=date; e.description=desc; e.categoryId=cat; setExpenseRefund(e, amount, refund); }
+    if(e){ e.date=date; e.description=desc; e.categoryId=cat; setExpenseRefund(e, amount, refund); if(exceptional) e.exceptional = true; else delete e.exceptional; }
     toast('Dépense mise à jour.', 'ok');
     editingExpenseId = null;
   } else {
     const e = {id:uid('exp'), date, description:desc, categoryId:cat, amount:0, createdAt:Date.now()};
     setExpenseRefund(e, amount, refund);
+    if(exceptional) e.exceptional = true;
     state.expenses.push(e);
     toast(refund ? 'Dépense ajoutée, coût réel ' + fmtEUR(e.amount) + '.' : 'Dépense ajoutée.', 'ok');
   }
   saveState();
   resetExpenseForm();
-  refreshYearFilters();
-  renderExpensesList();
-  renderDashboard();
-  renderCategoriesTab();
+  refreshViews();
 }
 function editExpense(id){
   const e = state.expenses.find(x=>x.id===id);
@@ -961,7 +1129,11 @@ function editExpense(id){
   document.getElementById('expRefDate').value = rf && rf.date ? rf.date : '';
   document.getElementById('expRefSource').value = rf ? rf.source : '';
   document.getElementById('expRefundBox').open = !!rf;
+  document.getElementById('expExceptional').checked = !!e.exceptional;
+  expCatTouched = true;
+  document.getElementById('expCatHint').style.display = 'none';
   updateRefundUi();
+  updateExcHint();
   document.getElementById('expSubmit').textContent = 'Mettre à jour';
   document.getElementById('expCancelEdit').style.display = 'inline-flex';
   switchTab('expenses');
@@ -983,7 +1155,7 @@ function openRefundReceivedModal(id){
     <label for="rcDate">Date de réception</label>
     <input type="date" id="rcDate">
     <label for="rcAmount">Montant reçu (€)</label>
-    <input type="number" id="rcAmount" step="0.01" min="0">
+    <input type="number" id="rcAmount" inputmode="decimal" step="0.01" min="0">
     <p class="hint" id="rcPreview" style="margin:10px 0 0;"></p>
     <div class="btn-row">
       <button class="btn" id="rcSave" type="button">Enregistrer</button>
@@ -1019,10 +1191,7 @@ function deleteExpenseConfirm(id, btn){
     state.expenses = state.expenses.filter(x=>x.id!==id);
     saveState();
     toast('Dépense supprimée.', 'ok');
-    refreshYearFilters();
-    renderExpensesList();
-    renderDashboard();
-    renderCategoriesTab();
+    refreshViews();
   } else {
     btn.dataset.confirming='1';
     btn.textContent='Confirmer ?';
@@ -1156,8 +1325,12 @@ function renderExpensesList(){
   let list = getFilteredExpenses().sort(sortMode==='created'
     ? (a,b)=> (b.createdAt||0)-(a.createdAt||0)
     : (a,b)=> b.date.localeCompare(a.date) || (b.createdAt||0)-(a.createdAt||0));
+  const sig = [yearSelect.value, document.getElementById('expFilterCat').value, searchTerm, sortMode, pendOnly.checked].join('|');
+  if(sig !== expSig){ expSig = sig; expExtra = 0; }
   renderExpensesTotals();
+  const more = document.getElementById('expMore');
   if(list.length===0){
+    more.innerHTML = '';
     wrap.innerHTML = pendOnly.checked
       ? `<div class="empty"><div class="big">Aucun remboursement en attente</div>Rien à afficher avec ces filtres.</div>`
       : isSearching
@@ -1165,7 +1338,19 @@ function renderExpensesList(){
       : `<div class="empty"><div class="big">Aucune dépense</div>Ajoute ta première dépense ci-dessus pour commencer le suivi.</div>`;
     return;
   }
-  wrap.innerHTML = list.map(e=>{
+  const noFilter = !isSearching && yearSelect.value === 'all' && document.getElementById('expFilterCat').value === 'all' && !pendOnly.checked;
+  let limit;
+  if(noFilter && sortMode === 'date'){
+    const cutoff = isoAddDays(todayISO(), -27);                       // the last 4 weeks by default
+    limit = Math.max(list.filter(e=> e.date >= cutoff).length, Math.min(list.length, 15)) + expExtra;
+  } else limit = EXP_PAGE + expExtra;
+  const shown = list.slice(0, limit);
+  if(list.length > shown.length){
+    const rest = list.length - shown.length;
+    more.innerHTML = `<button class="btn outline block" id="expMoreBtn" type="button">Voir plus (${rest} dépense${rest>1?'s':''} plus ancienne${rest>1?'s':''})</button>`;
+    document.getElementById('expMoreBtn').onclick = ()=>{ expExtra += EXP_PAGE; renderExpensesList(); };
+  } else more.innerHTML = '';
+  wrap.innerHTML = shown.map(e=>{
     const c = catById(e.categoryId);
     const isCredit = e.amount < 0;
     const rf = e.refund;
@@ -1180,7 +1365,7 @@ function renderExpensesList(){
       <div class="dot" style="background:${c.color}"></div>
       <div class="body">
         <div class="row1"><span class="desc">${escapeHtml(e.description)}</span><span class="amount${isCredit?' credit':''}">${fmtEUR(e.amount)}</span></div>
-        <div class="meta">${fmtDateFR(e.date)} · ${escapeHtml(c.name)}${isCredit?' · <span class="cr-tag">note de crédit</span>':''}${rf?' · payé '+fmtEUR(e.paid):''}</div>
+        <div class="meta">${fmtDateFR(e.date)} · ${escapeHtml(c.name)}${isCredit?' · <span class="cr-tag">note de crédit</span>':''}${isExceptional(e)?' · <span class="exc-tag">exceptionnelle</span>':''}${rf?' · payé '+fmtEUR(e.paid):''}</div>
         ${refundHtml}
         <div class="actions">
           ${rf && rf.status === 'pending' ? `<button data-act="refund-received" data-id="${e.id}">Marquer reçu</button>` : ''}
@@ -1206,14 +1391,185 @@ function renderExpensesTab(){
   renderExpensesList();
 }
 
+/* ============================= SUGGESTIONS / QUICK ADD ============================= */
+/* ---- v2 : suggestions, exceptional purchases, list size ---- */
+let expExtra = 0;                 // extra rows revealed with « Voir plus »
+let expSig = '';
+let expCatTouched = false;
+const EXP_PAGE = 60;
+
+// Suggestions made from the user's own history
+function rebuildDescList(){
+  const el = document.getElementById('descList');
+  if(el){
+    const cnt = {}, last = {};
+    state.expenses.forEach(e=>{
+      if(e.amount < 0 || !e.description) return;
+      const k = e.description.trim(); if(!k) return;
+      cnt[k] = (cnt[k]||0) + 1; last[k] = Math.max(last[k]||0, e.createdAt||0);
+    });
+    const top = Object.keys(cnt).sort((a,b)=> cnt[b]-cnt[a] || last[b]-last[a]).slice(0, 250);
+    el.innerHTML = top.map(d=> `<option value="${escapeHtml(d)}"></option>`).join('');
+  }
+  const il = document.getElementById('incLabelList');
+  if(il){
+    const labels = Array.from(new Set(state.incomes.map(i=> i.label).filter(Boolean))).slice(0, 100);
+    il.innerHTML = labels.map(d=> `<option value="${escapeHtml(d)}"></option>`).join('');
+  }
+}
+// Category suggested for a description : the last one used for the same description, else the most frequent one among descriptions that start with it.
+function suggestCategoryFor(desc){
+  const d = String(desc||'').trim().toLowerCase();
+  if(d.length < 2) return null;
+  let exact = null;
+  const prefixCount = {};
+  state.expenses.forEach(e=>{
+    if(e.amount < 0) return;
+    const x = e.description.trim().toLowerCase();
+    if(x === d){ if(!exact || (e.createdAt||0) >= (exact.createdAt||0)) exact = e; }
+    else if(d.length >= 3 && x.indexOf(d) === 0) prefixCount[e.categoryId] = (prefixCount[e.categoryId]||0) + 1;
+  });
+  if(exact) return exact.categoryId;
+  const ids = Object.keys(prefixCount).sort((a,b)=> prefixCount[b] - prefixCount[a]);
+  return ids.length ? ids[0] : null;
+}
+function updateCatSuggestion(){
+  if(editingExpenseId || expCatTouched) return;
+  const id = suggestCategoryFor(document.getElementById('expDesc').value);
+  const hint = document.getElementById('expCatHint');
+  if(id && state.categories.some(c=> c.id === id)){
+    document.getElementById('expCat').value = id;
+    hint.style.display = 'block';
+    hint.textContent = "Catégorie proposée d'après tes saisies précédentes : " + catById(id).name + '.';
+  } else { hint.style.display = 'none'; hint.textContent = ''; }
+}
+function updateExcHint(){
+  const amt = parseFloat(document.getElementById('expAmount').value);
+  const th = state.settings.bigThreshold || 300;
+  const cb = document.getElementById('expExceptional'), hint = document.getElementById('expExcHint');
+  if(!cb.checked && !isNaN(amt) && amt >= th){
+    hint.style.display = 'block';
+    hint.textContent = "Montant élevé : est-ce un achat ponctuel ? Coche « exceptionnelle » pour ne pas fausser ton objectif de la semaine.";
+  } else { hint.style.display = 'none'; hint.textContent = ''; }
+}
+
+/* ============================= QUICK ADD (floating + button) ============================= */
+function recentCategoryIds(max){
+  const cutoff = isoAddDays(todayISO(), -90);
+  const cnt = {};
+  state.expenses.forEach(e=>{ if(e.amount < 0 || e.date < cutoff) return; cnt[e.categoryId] = (cnt[e.categoryId]||0) + 1; });
+  return Object.keys(cnt)
+    .filter(id=> id !== 'uncategorized' && state.categories.some(c=> c.id === id))
+    .sort((a,b)=> cnt[b] - cnt[a]).slice(0, max);
+}
+function openQuickAdd(){
+  const old = document.getElementById('qaOverlay');
+  if(old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'qaOverlay';
+  overlay.innerHTML = `<div class="modal">
+    <button class="modal-close" id="qaClose" type="button">&times;</button>
+    <h3>Nouvelle dépense</h3>
+    <label for="qaAmount">Montant (€)</label>
+    <input type="text" id="qaAmount" inputmode="decimal" autocomplete="off" placeholder="0,00">
+    <label for="qaDesc">Description</label>
+    <input type="text" id="qaDesc" list="descList" autocomplete="off" placeholder="Ex. Colruyt, essence, café…">
+    <p class="hint" id="qaSuggHint" style="display:none; margin:6px 0 0;"></p>
+    <label>Catégorie</label>
+    <div class="qa-chips" id="qaChips"></div>
+    <select id="qaCatSelect" style="margin-top:8px;"><option value="">Autre catégorie…</option>${state.categories.map(c=> `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</select>
+    <div style="display:flex; align-items:center; gap:10px; margin-top:12px; font-size:0.82rem;"><span id="qaDateTxt">Aujourd'hui</span><button type="button" class="linklike" id="qaDateBtn">Changer la date</button></div>
+    <input type="date" id="qaDate" style="display:none; margin-top:6px;">
+    <div class="btn-row">
+      <button class="btn" id="qaSave" type="button">Enregistrer</button>
+      <button class="btn secondary" id="qaMore" type="button">Plus d'options…</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const g = id => document.getElementById(id);
+  const qa = {catId:null, touched:false, suggested:null};
+  g('qaDate').value = todayISO();
+
+  function renderChips(){
+    const ids = [];
+    if(qa.suggested) ids.push(qa.suggested);
+    recentCategoryIds(8).forEach(id=>{ if(!ids.includes(id)) ids.push(id); });
+    if(qa.catId && !ids.includes(qa.catId)) ids.unshift(qa.catId);
+    g('qaChips').innerHTML = ids.slice(0, 8).map(id=>{
+      const c = catById(id);
+      return `<button type="button" class="qa-chip${id===qa.catId?' on':''}${id===qa.suggested?' sugg':''}" data-id="${id}">${escapeHtml(c.name)}</button>`;
+    }).join('') || '<span class="hint" style="margin:0;">Choisis une catégorie ci-dessous.</span>';
+    g('qaChips').querySelectorAll('.qa-chip').forEach(b=> b.addEventListener('click', ()=>{
+      qa.catId = b.dataset.id; qa.touched = true; g('qaCatSelect').value = ''; renderChips();
+    }));
+  }
+  g('qaDesc').addEventListener('input', ()=>{
+    const id = suggestCategoryFor(g('qaDesc').value);
+    qa.suggested = id && state.categories.some(c=> c.id === id) ? id : null;
+    if(!qa.touched && qa.suggested){ qa.catId = qa.suggested; }
+    const hint = g('qaSuggHint');
+    if(qa.suggested && !qa.touched){ hint.style.display = 'block'; hint.textContent = "Catégorie proposée d'après tes saisies précédentes : " + catById(qa.suggested).name + '.'; }
+    else { hint.style.display = 'none'; }
+    renderChips();
+  });
+  g('qaCatSelect').addEventListener('change', ()=>{
+    if(g('qaCatSelect').value){ qa.catId = g('qaCatSelect').value; qa.touched = true; renderChips(); }
+  });
+  g('qaDateBtn').addEventListener('click', ()=>{
+    g('qaDate').style.display = 'block'; g('qaDateBtn').style.display = 'none'; g('qaDateTxt').textContent = 'Date';
+  });
+  const close = ()=> overlay.remove();
+  overlay.addEventListener('click', (ev)=>{ if(ev.target === overlay) close(); });
+  g('qaClose').addEventListener('click', close);
+  g('qaSave').addEventListener('click', ()=>{
+    const amount = parseAmount(g('qaAmount').value);
+    const date = g('qaDate').value;
+    if(isNaN(amount) || amount <= 0){ toast('Indique un montant valide.', 'err'); return; }
+    if(!isValidISO(date)){ toast('Indique une date valide.', 'err'); return; }
+    if(!qa.catId){ toast('Choisis une catégorie.', 'err'); return; }
+    const desc = g('qaDesc').value.trim() || catById(qa.catId).name;
+    const e = {id:uid('exp'), date, description:desc, categoryId:qa.catId, amount:r2(amount), createdAt:Date.now()};
+    state.expenses.push(e);
+    saveState();
+    close();
+    refreshViews();
+    toast('Ajouté : ' + desc + ' · ' + fmtEUR(e.amount), 'ok');
+  });
+  g('qaMore').addEventListener('click', ()=>{
+    const amount = parseAmount(g('qaAmount').value), desc = g('qaDesc').value.trim(), date = g('qaDate').value, catId = qa.catId;
+    close();
+    switchTab('expenses');
+    document.getElementById('expAmount').value = isNaN(amount) ? '' : amount;
+    document.getElementById('expDesc').value = desc;
+    if(isValidISO(date)) document.getElementById('expDate').value = date;
+    if(catId){ document.getElementById('expCat').value = catId; expCatTouched = true; }
+    updateRefundUi(); updateExcHint();
+    document.getElementById('expAmount').scrollIntoView({behavior:'smooth', block:'center'});
+    document.getElementById('expAmount').focus();
+  });
+  renderChips();
+  setTimeout(()=>{ const a = g('qaAmount'); if(a) a.focus(); }, 60);
+}
+
 /* ============================= INCOMES ============================= */
+/* ============================= INCOMES (single place, with a salary flag) ============================= */
 let lastIncomeId = null;
+let incSalMonthTouched = false;
 function setIncomeLegacyHint(i){
   const el = document.getElementById('incLegacyHint');
   if(!i){ el.style.display = 'none'; el.textContent = ''; return; }
   el.style.display = 'block';
   el.textContent = "Ancienne ligne de budget : " + fmtEUR(i.amount) + (i.frequency==='monthly' ? " par mois (soit " + fmtEUR(incomeAnnual(i)) + " par an)" : " par an")
     + ". Choisis une date de réception : elle deviendra un revenu reçu une seule fois, du montant indiqué ci-dessus.";
+}
+function updateIncSalaryUi(){
+  const on = document.getElementById('incSalary').checked;
+  document.getElementById('incSalMonthWrap').style.display = on ? 'block' : 'none';
+  if(!on) return;
+  if(!incSalMonthTouched) document.getElementById('incSalMonth').value = salaryRuleMonth(document.getElementById('incDate').value) || '';
+  const m = document.getElementById('incSalMonth').value;
+  document.getElementById('incSalMonthHint').textContent = isYM(m) ? 'Ce versement compte pour le salaire de ' + monthLabelFR(m).toLowerCase() + '.' : '';
 }
 function setupIncomesForm(){
   document.getElementById('incDate').value = todayISO();
@@ -1222,17 +1578,26 @@ function setupIncomesForm(){
     editingIncomeId = null;
     resetIncomeForm();
   });
-  document.getElementById('goSalaryCheck').addEventListener('click', ()=>{
-    incomeSubTab = 'salary';
-    fillSalarySettings();
-    renderSalaryPane();
-    window.scrollTo(0,0);
+  document.getElementById('incSalary').addEventListener('change', updateIncSalaryUi);
+  document.getElementById('incDate').addEventListener('change', updateIncSalaryUi);
+  document.getElementById('incSalMonth').addEventListener('change', ()=>{ incSalMonthTouched = true; updateIncSalaryUi(); });
+  document.getElementById('incLabel').addEventListener('input', ()=>{   // a source already used for a salary → tick the box
+    if(editingIncomeId) return;
+    const v = document.getElementById('incLabel').value.trim().toLowerCase();
+    if(v && state.incomes.some(i=> i.salary && String(i.label).trim().toLowerCase() === v)){
+      document.getElementById('incSalary').checked = true;
+      updateIncSalaryUi();
+    }
   });
 }
 function resetIncomeForm(){
   document.getElementById('incDate').value = todayISO();
   document.getElementById('incLabel').value = '';
   document.getElementById('incAmount').value = '';
+  document.getElementById('incSalary').checked = false;
+  document.getElementById('incSalMonth').value = '';
+  incSalMonthTouched = false;
+  updateIncSalaryUi();
   setIncomeLegacyHint(null);
   document.getElementById('incSubmit').textContent = 'Ajouter le revenu';
   document.getElementById('incCancelEdit').style.display = 'none';
@@ -1241,46 +1606,60 @@ function submitIncome(){
   const dateVal = document.getElementById('incDate').value;
   const label = document.getElementById('incLabel').value.trim();
   const amount = parseFloat(document.getElementById('incAmount').value);
+  const isSalary = document.getElementById('incSalary').checked;
   if(!isValidISO(dateVal)){ toast('Indique la date de réception.', 'err'); return; }
   if(!label){ toast('Indique une source de revenu.', 'err'); return; }
   if(isNaN(amount) || amount<=0){ toast('Indique un montant valide.', 'err'); return; }
+  let salaryMonth = null;
+  if(isSalary){
+    const m = document.getElementById('incSalMonth').value;
+    if(m && !isYM(m)){ toast('Mois du salaire invalide (format AAAA-MM).', 'err'); return; }
+    salaryMonth = (m && m !== salaryRuleMonth(dateVal)) ? m : null;
+  }
   const year = parseInt(dateVal.slice(0,4),10);
   if(editingIncomeId){
     const i = state.incomes.find(x=>x.id===editingIncomeId);
-    if(i){ i.year=year; i.frequency='once'; i.label=label; i.amount=amount; i.date=dateVal; lastIncomeId = i.id; }
+    if(i){
+      i.year=year; i.frequency='once'; i.label=label; i.amount=amount; i.date=dateVal;
+      if(isSalary){ i.salary = true; i.salaryMonth = salaryMonth; } else { delete i.salary; delete i.salaryMonth; }
+      lastIncomeId = i.id;
+    }
     toast('Revenu mis à jour.', 'ok');
     editingIncomeId = null;
   } else {
     const inc = {id:uid('inc'), year, frequency:'once', label, amount, date:dateVal, createdAt:Date.now()};
+    if(isSalary){ inc.salary = true; inc.salaryMonth = salaryMonth; }
     state.incomes.push(inc);
     lastIncomeId = inc.id;
     toast('Revenu ajouté.', 'ok');
   }
+  if(isSalary) state.settings.salary.employer = label;
   saveState();
   resetIncomeForm();
-  renderIncomesList();
-  renderDashboard();
+  refreshViews();
 }
 function editIncome(id){
   const i = state.incomes.find(x=>x.id===id);
   if(!i) return;
   editingIncomeId = id;
+  switchTab('incomes');
   document.getElementById('incDate').value = i.date || '';      // legacy budget lines have no date: the user must pick one
   document.getElementById('incLabel').value = i.label;
   document.getElementById('incAmount').value = i.amount;
+  document.getElementById('incSalary').checked = !!i.salary;
+  incSalMonthTouched = !!i.salaryMonth;
+  document.getElementById('incSalMonth').value = i.salary ? (salaryMonthOf({date:i.date, monthManual:i.salaryMonth}) || '') : '';
+  updateIncSalaryUi();
   setIncomeLegacyHint(i.date ? null : i);
   document.getElementById('incSubmit').textContent = 'Mettre à jour';
   document.getElementById('incCancelEdit').style.display = 'inline-flex';
-  incomeSubTab = 'budget';
-  switchTab('incomes');
 }
 function deleteIncomeConfirm(id, btn){
   if(btn.dataset.confirming==='1'){
     state.incomes = state.incomes.filter(x=>x.id!==id);
     saveState();
     toast('Revenu supprimé.', 'ok');
-    renderIncomesList();
-    renderDashboard();
+    refreshViews();
   } else {
     btn.dataset.confirming='1';
     btn.textContent='Confirmer ?';
@@ -1291,7 +1670,7 @@ function deleteIncomeConfirm(id, btn){
 function incomeSortKey(i){ return i.date ? i.date : (i.year + '-00-00'); }   // undated budget lines come after dated receipts of the same year
 function incomeRowHtml(i, dated){
   const meta = dated
-    ? 'Reçu le ' + fmtDateFR(i.date)
+    ? 'Reçu le ' + fmtDateFR(i.date) + (i.salary ? ' · <span class="cr-tag">salaire</span>' : '')
     : i.year + ' · ' + (i.frequency==='monthly' ? fmtEUR(i.amount)+' / mois (×12)' : 'montant annuel');
   return `<div class="list-item${i.id===lastIncomeId?' just-added':''}" data-inc="${i.id}">
       <div class="dot" style="background:var(--gain)"></div>
@@ -1305,6 +1684,8 @@ function incomeRowHtml(i, dated){
       </div>
     </div>`;
 }
+function renderIncomesTab(){ renderIncomesList(); fillSalarySettings(); renderSalaryPane(); }
+
 function wireIncomeButtons(root){
   root.querySelectorAll('button[data-act="edit"]').forEach(b=> b.addEventListener('click', ()=> editIncome(b.dataset.id)));
   root.querySelectorAll('button[data-act="del"]').forEach(b=> b.addEventListener('click', ()=> deleteIncomeConfirm(b.dataset.id, b)));
@@ -1337,12 +1718,8 @@ function renderIncomesList(){
     <div class="card">${legacy.map(i=> incomeRowHtml(i, false)).join('')}</div>`;
   wireIncomeButtons(lw);
 }
-function renderIncomesTab(){ renderIncomesList(); fillSalarySettings(); renderSalaryPane(); }
 
 /* ============================= SALARY CHECK ============================= */
-let incomeSubTab = 'budget';
-let editingSalaryId = null;
-let salMonthTouched = false;
 
 function salaryDefaults(){ return {rules:[], tolerance:60, alert:100, monthRule:'first', employer:'Salaire'}; }
 function normalizeSalaryState(st){
@@ -1403,7 +1780,7 @@ function salaryMonthStatus(key, received, expected){
 }
 function salaryMonthsData(){
   const byMonth = {};
-  state.salaryPayments.forEach(p=>{
+  salaryPaymentsView().forEach(p=>{
     const m = salaryMonthOf(p);
     if(m) (byMonth[m] = byMonth[m] || []).push(p);
   });
@@ -1472,8 +1849,8 @@ function salaryMonthCardHtml(m){
 function renderSalarySummary(months){
   const el = document.getElementById('salarySummary');
   const cfg = state.settings.salary;
-  if(state.salaryPayments.length === 0){
-    el.innerHTML = `<div class="card"><div class="empty"><div class="big">Aucun versement encodé</div>Ajoute ton premier versement ci-dessous, et indique ton salaire attendu dans « Réglages du contrôle ».</div></div>`;
+  if(salaryPaymentsView().length === 0){
+    el.innerHTML = `<div class="card"><div class="empty"><div class="big">Aucun salaire encodé</div>Encode un revenu en cochant « versement de salaire », et indique ton salaire attendu dans les réglages ci-dessous.</div></div>`;
     return;
   }
   if(cfg.rules.length === 0){
@@ -1531,92 +1908,20 @@ function renderSalaryMonths(){
   const el = document.getElementById('salaryMonths');
   if(months.length === 0){ el.innerHTML = ''; return; }
   el.innerHTML = months.slice().reverse().map(salaryMonthCardHtml).join('');
-  el.querySelectorAll('button[data-sal="edit"]').forEach(b=> b.addEventListener('click', ()=> editSalaryPayment(b.dataset.id)));
-  el.querySelectorAll('button[data-sal="del"]').forEach(b=> b.addEventListener('click', ()=> deleteSalaryConfirm(b.dataset.id, b)));
+  el.querySelectorAll('button[data-sal="edit"]').forEach(b=> b.addEventListener('click', ()=> editIncome(b.dataset.id)));
+  el.querySelectorAll('button[data-sal="del"]').forEach(b=> b.addEventListener('click', ()=> deleteIncomeConfirm(b.dataset.id, b)));
 }
 
-function renderSalaryPane(){
-  const bp = document.getElementById('incBudgetPane'), sp = document.getElementById('incSalaryPane');
-  if(!bp || !sp) return;
-  bp.style.display = incomeSubTab === 'budget' ? '' : 'none';
-  sp.style.display = incomeSubTab === 'salary' ? '' : 'none';
-  document.querySelectorAll('#incSubPills .pill').forEach(p=> p.classList.toggle('active', p.dataset.sub === incomeSubTab));
-  if(incomeSubTab === 'salary') renderSalaryMonths();
-}
 
-function updateSalMonthHint(){
-  const el = document.getElementById('salMonthHint');
-  if(!el) return;
-  const m = document.getElementById('salMonth').value;
-  el.textContent = isYM(m) ? "Ce versement compte pour le salaire de " + monthLabelFR(m).toLowerCase() + "." : "";
-}
 function fillSalarySettings(){
   const cfg = state.settings.salary;
   document.getElementById('salTol').value = cfg.tolerance;
   document.getElementById('salAlert').value = cfg.alert;
   document.getElementById('salMonthRule').value = cfg.monthRule;
   document.getElementById('salExpAmount').value = '';
-  const earliest = state.salaryPayments.map(salaryMonthOf).filter(Boolean).sort()[0];
+  const earliest = salaryPaymentsView().map(salaryMonthOf).filter(Boolean).sort()[0];
   document.getElementById('salExpFrom').value = earliest || salaryRuleMonth(todayISO()) || '';
   document.getElementById('salSettings').open = cfg.rules.length === 0;
-}
-function resetSalaryForm(){
-  const cfg = state.settings.salary;
-  salMonthTouched = false;
-  editingSalaryId = null;
-  document.getElementById('salDate').value = todayISO();
-  document.getElementById('salAmount').value = '';
-  document.getElementById('salLabel').value = cfg.employer;
-  document.getElementById('salMonth').value = salaryRuleMonth(todayISO()) || '';
-  document.getElementById('salSubmit').textContent = 'Ajouter le versement';
-  document.getElementById('salCancelEdit').style.display = 'none';
-  updateSalMonthHint();
-}
-function submitSalaryPayment(){
-  const date = document.getElementById('salDate').value;
-  const amount = parseFloat(document.getElementById('salAmount').value);
-  const label = document.getElementById('salLabel').value.trim() || state.settings.salary.employer;
-  const monthVal = document.getElementById('salMonth').value;
-  if(!isValidISO(date)){ toast('Indique une date valide.', 'err'); return; }
-  if(isNaN(amount) || amount <= 0){ toast('Indique un montant valide.', 'err'); return; }
-  if(monthVal && !isYM(monthVal)){ toast('Mois du salaire invalide (format AAAA-MM).', 'err'); return; }
-  const def = salaryRuleMonth(date);
-  const monthManual = (monthVal && monthVal !== def) ? monthVal : null;
-  if(editingSalaryId){
-    const p = state.salaryPayments.find(x=> x.id === editingSalaryId);
-    if(p) Object.assign(p, {date, amount, label, monthManual});
-    toast('Versement mis à jour.', 'ok');
-  } else {
-    state.salaryPayments.push({id:uid('sal'), date, amount, label, monthManual, createdAt:Date.now()});
-    toast('Versement ajouté.', 'ok');
-  }
-  state.settings.salary.employer = label;
-  saveState();
-  resetSalaryForm();
-  renderSalaryPane();
-}
-function editSalaryPayment(id){
-  const p = state.salaryPayments.find(x=> x.id === id);
-  if(!p) return;
-  editingSalaryId = id;
-  salMonthTouched = !!p.monthManual;
-  document.getElementById('salDate').value = p.date;
-  document.getElementById('salAmount').value = p.amount;
-  document.getElementById('salLabel').value = p.label || '';
-  document.getElementById('salMonth').value = salaryMonthOf(p) || '';
-  document.getElementById('salSubmit').textContent = 'Mettre à jour';
-  document.getElementById('salCancelEdit').style.display = 'inline-flex';
-  updateSalMonthHint();
-  document.getElementById('salAmount').scrollIntoView({behavior:'smooth', block:'center'});
-}
-function deleteSalaryConfirm(id, btn){
-  if(btn.dataset.confirming === '1'){
-    state.salaryPayments = state.salaryPayments.filter(x=> x.id !== id);
-    saveState(); renderSalaryPane(); toast('Versement supprimé.', 'ok');
-  } else {
-    btn.dataset.confirming = '1'; btn.textContent = 'Confirmer ?'; btn.classList.add('confirming');
-    setTimeout(()=>{ if(btn.dataset.confirming === '1'){ btn.dataset.confirming = '0'; btn.textContent = 'Suppr.'; btn.classList.remove('confirming'); } }, 2800);
-  }
 }
 function saveSalaryRule(){
   const amt = parseFloat(document.getElementById('salExpAmount').value);
@@ -1645,26 +1950,6 @@ function saveSalaryParams(){
   renderSalaryPane();
   toast('Réglages enregistrés.', 'ok');
 }
-function setupSalary(){
-  document.querySelectorAll('#incSubPills .pill').forEach(p=> p.addEventListener('click', ()=>{
-    incomeSubTab = p.dataset.sub;
-    if(incomeSubTab === 'salary') fillSalarySettings();
-    renderSalaryPane();
-  }));
-  document.getElementById('salSubmit').addEventListener('click', submitSalaryPayment);
-  document.getElementById('salCancelEdit').addEventListener('click', resetSalaryForm);
-  document.getElementById('salExpSave').addEventListener('click', saveSalaryRule);
-  document.getElementById('salSaveParams').addEventListener('click', saveSalaryParams);
-  document.getElementById('salDate').addEventListener('change', ()=>{
-    if(!salMonthTouched){
-      document.getElementById('salMonth').value = salaryRuleMonth(document.getElementById('salDate').value) || '';
-    }
-    updateSalMonthHint();
-  });
-  document.getElementById('salMonth').addEventListener('change', ()=>{ salMonthTouched = true; updateSalMonthHint(); });
-  resetSalaryForm();
-  fillSalarySettings();
-}
 
 /* ============================= CREDIT NOTES (refunds) ============================= */
 // A credit note is stored as an expense with a NEGATIVE amount, so every total, average and projection nets it out.
@@ -1692,7 +1977,7 @@ function openCreditModal(catId, editId){
     <label for="crDate">Date de la note de crédit</label>
     <input type="date" id="crDate">
     <label for="crAmount">Montant remboursé (€)</label>
-    <input type="number" id="crAmount" step="0.01" min="0" placeholder="0.00">
+    <input type="number" id="crAmount" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
     <label for="crDesc">Description</label>
     <input type="text" id="crDesc">
     <p class="hint" id="crPreview" style="margin:10px 0 0;"></p>
@@ -1766,7 +2051,20 @@ function migrateWarmPalette(st){
   return changed;
 }
 
-/* ============================= CATEGORIES ============================= */
+/* ============================= BUDGET (categories + budgets) ============================= */
+let budgetYear = null;
+function budgetYears(){
+  const ys = new Set(allYearsInData());
+  ys.add(new Date().getFullYear());
+  return Array.from(ys).sort((a,b)=> a-b);
+}
+function yearElapsedFraction(){
+  const now = new Date(), y = now.getFullYear();
+  const start = Date.UTC(y,0,1), end = Date.UTC(y+1,0,1);
+  const today = Date.UTC(y, now.getMonth(), now.getDate());
+  return Math.max(0, Math.min(1, (today - start) / (end - start)));
+}
+
 function setupCategoriesForm(){
   const sw = document.getElementById('catSwatches');
   sw.innerHTML = PALETTE.map(c=>`<div class="swatch" data-color="${c}" style="background:${c}"></div>`).join('') +
@@ -1793,6 +2091,8 @@ function resetCategoryForm(){
   document.querySelectorAll('#catSwatches .swatch').forEach((x,i)=> x.classList.toggle('selected', i===0));
   document.getElementById('catSubmit').textContent = 'Créer la catégorie';
   document.getElementById('catCancelEdit').style.display = 'none';
+  document.getElementById('catNewTitle').textContent = 'Nouvelle catégorie';
+  document.getElementById('catNewBox').open = false;
 }
 function submitCategory(){
   const name = document.getElementById('catName').value.trim();
@@ -1809,19 +2109,21 @@ function submitCategory(){
   saveState();
   resetCategoryForm();
   populateCategorySelects();
-  renderCategoriesTab();
-  renderExpensesList();
-  renderDashboard();
+  refreshViews();
 }
 function editCategory(id){
   const c = state.categories.find(x=>x.id===id);
   if(!c || c.builtin){ if(c&&c.builtin) toast("Cette catégorie par défaut ne peut pas être modifiée.", 'err'); return; }
   editingCategoryId = id;
+  switchTab('categories');
   document.getElementById('catName').value = c.name;
   selectedSwatch = c.color;
   document.getElementById('catSubmit').textContent = 'Mettre à jour';
   document.getElementById('catCancelEdit').style.display = 'inline-flex';
-  switchTab('categories');
+  document.getElementById('catNewTitle').textContent = 'Modifier la catégorie';
+  const box = document.getElementById('catNewBox');
+  box.open = true;
+  box.scrollIntoView({behavior:'smooth', block:'center'});
 }
 function deleteCategoryConfirm(id, btn){
   const c = state.categories.find(x=>x.id===id);
@@ -1832,9 +2134,7 @@ function deleteCategoryConfirm(id, btn){
     saveState();
     toast('Catégorie supprimée. Ses dépenses sont passées en "Non catégorisé".', 'ok');
     populateCategorySelects();
-    renderCategoriesTab();
-    renderExpensesList();
-    renderDashboard();
+    refreshViews();
   } else {
     btn.dataset.confirming='1';
     btn.textContent='Confirmer ?';
@@ -1847,42 +2147,131 @@ function viewCategoryExpenses(catId){
   document.getElementById('expFilterYear').value = 'all';
   document.getElementById('expFilterCat').value = catId;
   document.getElementById('expTotals').open = true;
+  expExtra = 0;
   switchTab('expenses');
 }
-function renderCategoriesTab(){
-  const wrap = document.getElementById('categoriesList');
-  const totals = {}, paid = {}, credits = {}, nPaid = {}, nCredit = {}, refunds = {}, refundsPending = {};
+
+function categoryYearStats(year){
+  const S = {};
+  const get = id => (S[id] = S[id] || {net:0, paid:0, credits:0, nPaid:0, nCredit:0, refunds:0, refundsPending:0});
   state.expenses.forEach(e=>{
-    totals[e.categoryId] = (totals[e.categoryId]||0) + e.amount;
-    if(e.amount < 0){ credits[e.categoryId] = (credits[e.categoryId]||0) - e.amount; nCredit[e.categoryId] = (nCredit[e.categoryId]||0) + 1; }
+    if(parseInt(e.date.slice(0,4),10) !== year) return;
+    const s = get(e.categoryId);
+    s.net += e.amount;
+    if(e.amount < 0){ s.credits -= e.amount; s.nCredit++; }
     else {
-      paid[e.categoryId] = (paid[e.categoryId]||0) + expensePaid(e); nPaid[e.categoryId] = (nPaid[e.categoryId]||0) + 1;
-      if(e.refund){
-        refunds[e.categoryId] = (refunds[e.categoryId]||0) + e.refund.amount;
-        if(e.refund.status === 'pending') refundsPending[e.categoryId] = (refundsPending[e.categoryId]||0) + e.refund.amount;
-      }
+      s.paid += expensePaid(e); s.nPaid++;
+      if(e.refund){ s.refunds += e.refund.amount; if(e.refund.status === 'pending') s.refundsPending += e.refund.amount; }
     }
   });
-  wrap.innerHTML = `<p class="hint" style="margin-top:0;">"Compressible" = une dépense sur laquelle tu as une marge de manœuvre (loisirs, nourriture…) et qui apparaît dans le simulateur d'épargne. "Fixe" = imposée (taxes, abonnements obligatoires…), exclue des curseurs du simulateur.</p>` +
-    state.categories.map(c=>{
-    const np = nPaid[c.id]||0, nc = nCredit[c.id]||0, n = np + nc;
-    const net = totals[c.id]||0;
-    const isFlex = c.flexible !== false;
-    return `<div class="list-item">
-      <div class="dot" style="background:${c.color}"></div>
-      <div class="body">
-        <div class="row1"><span class="desc">${escapeHtml(c.name)}</span><span class="amount${net<0?' credit':''}">${fmtEUR(net)}</span></div>
-        <div class="meta">${np} dépense${np===1?'':'s'} enregistrée${np===1?'':'s'}${(refunds[c.id]||0)>0?` · remboursements (<span class="cr-tag">−${fmtEUR(refunds[c.id])}</span>${(refundsPending[c.id]||0)>0?', dont '+fmtEUR(refundsPending[c.id])+' attendus':''})`:''}${nc>0?` · ${nc} note${nc>1?'s':''} de crédit (<span class="cr-tag">−${fmtEUR(credits[c.id])}</span>)`:''}${(nc>0||(refunds[c.id]||0)>0)?` · payé ${fmtEUR(paid[c.id]||0)}`:''}${c.builtin?' · catégorie par défaut':''}</div>
-        <div class="actions">
-          <button data-act="credit" data-id="${c.id}">Note de crédit</button>
-          ${n>0?`<button data-act="view" data-id="${c.id}">Voir les dépenses</button>`:''}
-          <button class="flex-toggle ${isFlex?'on':'off'}" data-act="flex" data-id="${c.id}">${isFlex?'Compressible':'Fixe'}</button>
-          ${c.builtin?'':`<button data-act="edit" data-id="${c.id}">Modifier</button>
-          <button data-act="del" data-id="${c.id}">Suppr.</button>`}
-        </div>
+  return S;
+}
+function budgetRowHtml(c, s, year){
+  s = s || {net:0, paid:0, credits:0, nPaid:0, nCredit:0, refunds:0, refundsPending:0};
+  const b = categoryBudget(c), net = r2(s.net);
+  const isFlex = c.flexible !== false;
+  let barHtml = '', status = '';
+  if(b > 0){
+    const pct = net / b * 100;
+    const cls = pct > 100 ? 'over' : pct >= 80 ? 'warn' : 'ok';
+    const tick = year === new Date().getFullYear() ? yearElapsedFraction() * 100 : null;
+    const diff = r2(b - net);
+    barHtml = `<div class="bud-bar"><div class="bud-fill ${cls}" style="width:${Math.max(0, Math.min(100, pct))}%"></div>${tick!==null ? `<div class="bud-tick" style="left:${tick.toFixed(1)}%"></div>` : ''}</div>`;
+    status = `${pct.toFixed(0)} % du budget · ` + (diff >= 0 ? `reste <strong>${fmtEUR(diff)}</strong>` : `<span class="over-tag">dépassé de ${fmtEUR(-diff)}</span>`);
+  } else {
+    status = 'Pas de budget';
+  }
+  const np = s.nPaid, nc = s.nCredit;
+  const detail = `${np} dépense${np===1?'':'s'}`
+    + (s.refunds > 0 ? ` · remboursements (<span class="cr-tag">−${fmtEUR(s.refunds)}</span>${s.refundsPending>0 ? ', dont '+fmtEUR(s.refundsPending)+' attendus' : ''})` : '')
+    + (nc > 0 ? ` · ${nc} note${nc>1?'s':''} de crédit (<span class="cr-tag">−${fmtEUR(s.credits)}</span>)` : '')
+    + ((nc > 0 || s.refunds > 0) ? ` · payé ${fmtEUR(s.paid)}` : '')
+    + (c.builtin ? ' · catégorie par défaut' : '');
+  return `<div class="list-item">
+    <div class="dot" style="background:${c.color}"></div>
+    <div class="body">
+      <div class="row1"><span class="desc">${escapeHtml(c.name)}</span><span class="amount${net<0?' credit':''}">${fmtEUR(net)}${b>0 ? ` <span class="bud-of">/ ${fmtEUR(b)}</span>` : ''}</span></div>
+      ${barHtml}
+      <div class="meta">${status}</div>
+      <div class="meta">${detail}</div>
+      <div class="actions">
+        <button data-act="budget" data-id="${c.id}">Budget</button>
+        <button data-act="credit" data-id="${c.id}">Note de crédit</button>
+        ${(np+nc)>0 ? `<button data-act="view" data-id="${c.id}">Voir les dépenses</button>` : ''}
+        <button class="flex-toggle ${isFlex?'on':'off'}" data-act="flex" data-id="${c.id}">${isFlex?'Compressible':'Fixe'}</button>
+        ${c.builtin ? '' : `<button data-act="edit" data-id="${c.id}">Modifier</button><button data-act="del" data-id="${c.id}">Suppr.</button>`}
+      </div>
+    </div>
+  </div>`;
+}
+function saveWeeklyTarget(){
+  const v = parseFloat(document.getElementById('objManual').value);
+  if(isNaN(v) || v <= 0){ toast('Indique un objectif hebdomadaire valide.', 'err'); return; }
+  state.settings.weekly.manualTarget = r2(v);
+  saveState(); refreshViews(); toast('Objectif enregistré.', 'ok');
+}
+function clearWeeklyTarget(){
+  state.settings.weekly.manualTarget = null;
+  saveState(); refreshViews(); toast('Objectif automatique rétabli.', 'ok');
+}
+function renderBudgetTop(year, stats){
+  const el = document.getElementById('budgetTop');
+  const budgeted = state.categories.filter(c=> categoryBudget(c) > 0);
+  const B = budgeted.reduce((s,c)=> s + c.budget, 0);
+  const R = budgeted.reduce((s,c)=> s + ((stats[c.id]||{}).net || 0), 0);
+  const other = state.categories.filter(c=> !(categoryBudget(c) > 0)).reduce((s,c)=> s + ((stats[c.id]||{}).net || 0), 0);
+  const obj = weeklyObjective();
+  const flexTotal = state.categories.filter(c=> c.flexible !== false && c.budget > 0).reduce((s,c)=> s + c.budget, 0);
+  const man = state.settings.weekly.manualTarget;
+  let objTxt;
+  if(man > 0) objTxt = `Objectif manuel : <strong>${fmtEUR(man)}</strong> par semaine.` + (flexTotal > 0 ? ` (Automatique : ${fmtEUR(flexTotal/52)}.)` : '');
+  else if(flexTotal > 0) objTxt = `Objectif automatique : <strong>${fmtEUR(flexTotal/52)}</strong> par semaine (budgets des catégories compressibles ${fmtEUR(flexTotal)} ÷ 52).`;
+  else objTxt = `Aucun objectif pour l'instant. Fixe un budget annuel sur tes catégories compressibles (bouton « Budget » ci-dessous) ou saisis un objectif manuel.`;
+  el.innerHTML = (budgeted.length ? `<div class="kpi-row dash">
+      <div class="kpi"><div class="label">Budget ${year}</div><div class="value">${fmtEUR(B)}</div></div>
+      <div class="kpi"><div class="label">Dépensé (budgété)</div><div class="value ${R>B?'loss':''}">${fmtEUR(R)}</div></div>
+      <div class="kpi wide"><div class="label">Reste sur les budgets</div><div class="value ${B-R>=0?'gain':'loss'}">${fmtEURSigned(r2(B-R))}</div></div>
+    </div>
+    ${Math.abs(other) > 0.005 ? `<p class="hint" style="margin:4px 0 0;">Hors budget : ${fmtEUR(other)} dépensés dans des catégories sans budget.</p>` : ''}` : '')
+    + `<h2 class="section-title">Objectif de la semaine<span class="rule"></span></h2>
+    <div class="card">
+      <p class="hint" style="margin:0 0 8px;">${objTxt} Seules les catégories « compressibles » comptent ; les achats exceptionnels sont exclus.</p>
+      <label for="objManual">Objectif manuel (€ par semaine)</label>
+      <input type="number" id="objManual" inputmode="decimal" step="1" min="0" placeholder="${obj ? Math.round(obj.value) : 'Ex. 250'}" value="${man > 0 ? man : ''}">
+      <div class="btn-row">
+        <button class="btn" id="objSave" type="button">Enregistrer l'objectif</button>
+        ${man > 0 ? '<button class="btn secondary" id="objAuto" type="button">Revenir à l\'automatique</button>' : ''}
       </div>
     </div>`;
-  }).join('');
+  document.getElementById('objSave').onclick = saveWeeklyTarget;
+  if(document.getElementById('objAuto')) document.getElementById('objAuto').onclick = clearWeeklyTarget;
+  fitKpiValues();
+}
+function renderCategoriesTab(){
+  const years = budgetYears();
+  if(budgetYear === null || !years.includes(budgetYear)) budgetYear = new Date().getFullYear();
+  const pills = document.getElementById('budgetYearPills');
+  pills.innerHTML = years.map(y=>`<div class="pill ${y===budgetYear?'active':''}" data-y="${y}">${y}</div>`).join('');
+  pills.querySelectorAll('.pill').forEach(p=> p.addEventListener('click', ()=>{ budgetYear = parseInt(p.dataset.y, 10); renderCategoriesTab(); }));
+  const stats = categoryYearStats(budgetYear);
+  renderBudgetTop(budgetYear, stats);
+
+  const isCurrent = budgetYear === new Date().getFullYear();
+  const visible = state.categories.filter(c=> isCurrent || categoryBudget(c) > 0 || Math.abs((stats[c.id]||{}).net || 0) > 0.005);
+  const order = (a,b)=> categoryBudget(b) - categoryBudget(a) || ((stats[b.id]||{}).net||0) - ((stats[a.id]||{}).net||0) || a.name.localeCompare(b.name);
+  const flex = visible.filter(c=> c.flexible !== false).sort(order);
+  const fixed = visible.filter(c=> c.flexible === false).sort(order);
+  const group = (title, hint, list)=>{
+    if(!list.length) return '';
+    const b = list.reduce((s,c)=> s + categoryBudget(c), 0), r = list.reduce((s,c)=> s + ((stats[c.id]||{}).net||0), 0);
+    return `<h2 class="section-title">${title}<span class="rule"></span></h2>
+      <p class="hint">${hint}${b>0 ? ` Total : ${fmtEUR(r)} dépensés sur ${fmtEUR(b)} de budget.` : ''}</p>
+      <div class="card">${list.map(c=> budgetRowHtml(c, stats[c.id], budgetYear)).join('')}</div>`;
+  };
+  const wrap = document.getElementById('budgetLists');
+  wrap.innerHTML = group('Compressibles', 'Tu peux agir dessus : elles forment l\'objectif de la semaine. Le trait gris sur la barre indique où tu devrais en être à cette date de l\'année.', flex)
+    + group('Fixes', 'Dépenses imposées (taxes, abonnements obligatoires…) : suivies sur l\'année, hors objectif hebdomadaire.', fixed);
+  wrap.querySelectorAll('button[data-act="budget"]').forEach(b=> b.addEventListener('click', ()=> openBudgetModal(b.dataset.id)));
   wrap.querySelectorAll('button[data-act="credit"]').forEach(b=> b.addEventListener('click', ()=> openCreditModal(b.dataset.id)));
   wrap.querySelectorAll('button[data-act="view"]').forEach(b=> b.addEventListener('click', ()=> viewCategoryExpenses(b.dataset.id)));
   wrap.querySelectorAll('button[data-act="edit"]').forEach(b=> b.addEventListener('click', ()=> editCategory(b.dataset.id)));
@@ -1890,20 +2279,62 @@ function renderCategoriesTab(){
   wrap.querySelectorAll('button[data-act="flex"]').forEach(b=> b.addEventListener('click', ()=>{
     const c = state.categories.find(x=>x.id===b.dataset.id);
     if(!c) return;
-    const isFlex = c.flexible !== false;
-    c.flexible = !isFlex;
+    c.flexible = !(c.flexible !== false);
     saveState();
     renderCategoriesTab();
   }));
+  drawProjectionChart();
+}
+function openBudgetModal(catId){
+  const c = state.categories.find(x=> x.id === catId);
+  if(!c) return;
+  const old = document.getElementById('budgetOverlay');
+  if(old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'budgetOverlay';
+  overlay.innerHTML = `<div class="modal">
+    <button class="modal-close" id="bdClose" type="button">&times;</button>
+    <h3>Budget · ${escapeHtml(c.name)}</h3>
+    <p class="hint">Budget annuel de cette catégorie. Laisse vide pour retirer le budget.</p>
+    <label for="bdAmount">Budget annuel (€)</label>
+    <input type="number" id="bdAmount" inputmode="decimal" step="1" min="0" placeholder="Ex. 1200">
+    <p class="hint" id="bdPreview" style="margin:10px 0 0;"></p>
+    <div class="btn-row">
+      <button class="btn" id="bdSave" type="button">Enregistrer</button>
+      <button class="btn secondary" id="bdCancel" type="button">Annuler</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const g = id => document.getElementById(id);
+  g('bdAmount').value = c.budget > 0 ? c.budget : '';
+  const upd = ()=>{
+    const a = parseFloat(g('bdAmount').value);
+    g('bdPreview').textContent = (isNaN(a) || a <= 0) ? '' :
+      '≈ ' + fmtEUR(a/12) + ' par mois · ' + fmtEUR(a/52) + ' par semaine. ' + (c.flexible !== false ? "Compte dans l'objectif hebdomadaire." : 'Catégorie fixe : suivi annuel, hors objectif hebdomadaire.');
+  };
+  g('bdAmount').addEventListener('input', upd); upd();
+  overlay.addEventListener('click', (ev)=>{ if(ev.target === overlay) overlay.remove(); });
+  g('bdClose').addEventListener('click', ()=> overlay.remove());
+  g('bdCancel').addEventListener('click', ()=> overlay.remove());
+  g('bdSave').addEventListener('click', ()=>{
+    const raw = g('bdAmount').value.trim();
+    const a = parseFloat(raw);
+    if(raw !== '' && (isNaN(a) || a < 0)){ toast('Budget invalide.', 'err'); return; }
+    if(raw === '' || a === 0) delete c.budget; else c.budget = r2(a);
+    saveState();
+    overlay.remove();
+    refreshViews();
+    toast(c.budget > 0 ? 'Budget enregistré.' : 'Budget retiré.', 'ok');
+  });
 }
 
-/* ============================= WEEKLY HIGHLIGHT (header) ============================= */
-let weeklyHighlightStartIdx = null;
-let weeklyHighlightEndIdx = null;
+/* ============================= WEEK (home) ============================= */
 let weeklySelectedWeekIdx = null; // null = current week (follows the calendar)
-let weeklyModalMode = 'week';
 
 // Weeks run Monday → Sunday. Monday of week index w = day number 7*w - 3 (days since 1970-01-01).
+function weekStart(w){ return new Date((7*w-3)*86400000); }
+function weekStartLabel(w){ return weekStart(w).toLocaleDateString('fr-BE', {day:'numeric', month:'short', timeZone:'UTC'}); }
 function weekRangeLabel(w){
   const mon = new Date((7*w-3)*86400000);
   const sun = new Date((7*w+3)*86400000);
@@ -1920,6 +2351,7 @@ function weekBounds(){
   const curW = weekIndex(todayISO());
   let minW = curW;
   state.expenses.forEach(e=>{ const w = weekIndex(e.date); if(!isNaN(w) && w<minW) minW = w; });
+  state.incomes.forEach(i=>{ if(!i.date) return; const w = weekIndex(i.date); if(!isNaN(w) && w<minW) minW = w; });
   return {minW, curW};
 }
 function selectedWeekIdx(){
@@ -1937,92 +2369,66 @@ function weekExpenses(w){
 function setSelectedWeek(w){
   const {curW} = weekBounds();
   weeklySelectedWeekIdx = (w>=curW) ? null : w;
-  renderWeeklyHighlight();
+  renderWeekTab();
 }
 
-function renderWeeklyHighlight(){
-  const el = document.getElementById('weeklyHighlight');
-  if(!el) return;
-  if(state.expenses.length === 0){
-    el.className = 'weekly-highlight empty';
-    el.textContent = 'Encode tes dépenses pour voir ta moyenne hebdomadaire ici.';
-    el.onclick = null;
-    weeklyHighlightStartIdx = null;
-    return;
-  }
-  const currentYear = new Date().getFullYear();
-  const startIdx = weekIndex(currentYear+'-01-01');
-  const endIdx = weekIndex(todayISO());
-  weeklyHighlightStartIdx = startIdx;
-  weeklyHighlightEndIdx = endIdx;
-  const winWeeks = endIdx - startIdx + 1;
-
-  const allTotals = {};
+// One pass over the data : per week, spending split into compressible / fixed / exceptional, and income received.
+function buildWeekMap(){
+  const m = {};
+  const get = w => (m[w] = m[w] || {flex:0, fixed:0, exc:0, income:0, n:0});
   state.expenses.forEach(e=>{
-    const w = weekIndex(e.date);
-    if(!isNaN(w)) allTotals[w] = (allTotals[w]||0) + e.amount;
+    const w = weekIndex(e.date); if(isNaN(w)) return;
+    const r = get(w); r.n++;
+    if(isExceptional(e)) r.exc += e.amount;
+    else if(catById(e.categoryId).flexible !== false) r.flex += e.amount;
+    else r.fixed += e.amount;
   });
-  const ytdSeries = [];
-  for(let w=startIdx; w<=endIdx; w++) ytdSeries.push(allTotals[w]||0);
-  const avgRecent = mean(ytdSeries);
-
-  // compare against prior years' overall weekly average, if any exist
-  const allSeries = weeklySeriesForCategory('all');
-  const priorYearsWeeks = allSeries.length - winWeeks;
-  let trendHtml = '';
-  if(priorYearsWeeks > 0){
-    const priorAvg = mean(allSeries.slice(0, priorYearsWeeks));
-    if(priorAvg > 0){
-      const deltaPct = (avgRecent - priorAvg) / priorAvg * 100;
-      if(Math.abs(deltaPct) >= 1){
-        const up = deltaPct > 0;
-        trendHtml = ` · <span class="wh-trend">${up?'▲':'▼'} ${Math.abs(deltaPct).toFixed(0)}% vs années précédentes</span>`;
-      }
-    }
-  }
-
-  // selected week (default: current week)
+  state.incomes.forEach(i=>{
+    if(!i.date) return;
+    const w = weekIndex(i.date); if(isNaN(w)) return;
+    get(w).income += i.amount;
+  });
+  return m;
+}
+function weekAgg(map, w){
+  const r = map[w] || {flex:0, fixed:0, exc:0, income:0, n:0};
+  const ordinary = r.flex + r.fixed, spent = ordinary + r.exc;
+  return {w, flex:r2(r.flex), fixed:r2(r.fixed), exc:r2(r.exc), ordinary:r2(ordinary), spent:r2(spent),
+          income:r2(r.income), balance:r2(r.income - spent), n:r.n};
+}
+// Weekly objective = sum of the annual budgets of the compressible categories ÷ 52, unless the user typed one.
+function weeklyObjective(){
+  const man = state.settings.weekly && state.settings.weekly.manualTarget;
+  if(man > 0) return {value:man, source:'manual'};
+  const total = state.categories.filter(c=> c.flexible !== false && c.budget > 0).reduce((s,c)=> s + c.budget, 0);
+  if(total > 0) return {value:total/52, source:'budgets', total};
+  return null;
+}
+// "Typical" week : median of the last 26 complete weeks, exceptional purchases left out.
+function typicalWeek(map){
   const {minW, curW} = weekBounds();
-  const selW = selectedWeekIdx();
-  const selTotal = allTotals[selW] || 0;
-  const selCount = state.expenses.filter(e=> weekIndex(e.date)===selW).length;
-  let cmpHtml = '';
-  if(avgRecent > 0){
-    const d = (selTotal - avgRecent) / avgRecent * 100;
-    if(Math.abs(d) >= 1) cmpHtml = ` · <span class="wh-trend">${d>0?'▲':'▼'} ${Math.abs(d).toFixed(0)}% vs moyenne</span>`;
-  }
-  let opts = '';
-  for(let w=curW; w>=minW; w--){
-    const lbl = weekRangeLabel(w) + (w===curW ? ' (en cours)' : '') + ' · ' + fmtEURShort(allTotals[w]||0);
-    opts += `<option value="${w}" ${w===selW?'selected':''}>${escapeHtml(lbl)}</option>`;
-  }
+  const from = Math.max(minW, curW - 26), to = curW - 1;
+  if(to < from) return null;
+  const vals = [];
+  for(let w=from; w<=to; w++) vals.push(weekAgg(map, w).ordinary);
+  return {median:median(vals), mean:mean(vals), n:vals.length};
+}
+function bigCandidates(){
+  const th = state.settings.bigThreshold || 300;
+  return state.expenses.filter(e=> e.amount >= th && !e.exceptional && !e.excReviewed).sort((a,b)=> b.amount - a.amount);
+}
 
-  el.className = 'weekly-highlight';
-  el.onclick = null;
-  el.innerHTML = `<div class="wh-main" id="whMain">`
-    + `<span class="wh-label">Dépense hebdomadaire actuelle</span>`
-    + `<span class="wh-value">${fmtEUR(avgRecent)}<span class="wh-unit"> / semaine</span></span>`
-    + `<span class="wh-sub">Moyenne depuis le 1ᵉʳ janvier ${currentYear} (${winWeeks} semaine${winWeeks>1?'s':''})${trendHtml}</span>`
-    + `<span class="wh-tap-hint">Détail par catégorie ›</span>`
-    + `</div>`
-    + `<div class="wh-weekrow">`
-    +   `<div class="wh-weeknav">`
-    +     `<button class="wh-arrow" id="whPrev" type="button" aria-label="Semaine précédente" ${selW<=minW?'disabled':''}>‹</button>`
-    +     `<select id="whWeekSelect" aria-label="Choisir une semaine">${opts}</select>`
-    +     `<button class="wh-arrow" id="whNext" type="button" aria-label="Semaine suivante" ${selW>=curW?'disabled':''}>›</button>`
-    +   `</div>`
-    +   `<div class="wh-weeksum">`
-    +     `<div class="wh-weektxt"><span class="wh-weekamt">${fmtEUR(selTotal)}</span>`
-    +     `<span class="wh-weekmeta">${selW===curW?'Cette semaine':'Semaine du '+weekRangeLabel(selW)} · ${selCount} dépense${selCount>1?'s':''}${cmpHtml}</span></div>`
-    +     `<button class="wh-detail-btn" id="whWeekDetail" type="button">Détail ›</button>`
-    +   `</div>`
-    + `</div>`;
-
-  document.getElementById('whMain').onclick = ()=> openWeeklyModal('avg');
-  document.getElementById('whPrev').onclick = ()=> setSelectedWeek(selW-1);
-  document.getElementById('whNext').onclick = ()=> setSelectedWeek(selW+1);
-  document.getElementById('whWeekSelect').onchange = (ev)=> setSelectedWeek(parseInt(ev.target.value,10));
-  document.getElementById('whWeekDetail').onclick = ()=> openWeeklyModal('week');
+// Backup reminder
+function backupDaysAgo(){
+  const t = state.settings.lastBackup;
+  return t ? Math.floor((Date.now() - t) / 86400000) : null;
+}
+function backupDue(){
+  if(state.expenses.length + state.incomes.length === 0) return false;
+  const s = state.settings;
+  if(s.backupSnoozeUntil && Date.now() < s.backupSnoozeUntil) return false;
+  const d = backupDaysAgo();
+  return d === null || d >= 14;
 }
 
 function wkBreakdownRows(items, total, valueFn){
@@ -2041,78 +2447,184 @@ function wkBreakdownRows(items, total, valueFn){
   }).join('');
 }
 
-function weeklyAvgBodyHtml(){
-  const startIdx = weeklyHighlightStartIdx, endIdx = weeklyHighlightEndIdx;
-  const win = endIdx - startIdx + 1;
-  const currentYear = new Date().getFullYear();
-  const cats = state.categories.filter(c=> state.expenses.some(e=>e.categoryId===c.id));
-  const items = cats.map(c=>{
-    const sum = state.expenses
-      .filter(e=> e.categoryId===c.id && weekIndex(e.date)>=startIdx && weekIndex(e.date)<=endIdx)
-      .reduce((s,e)=>s+e.amount,0);
-    return {cat:c, sum};
-  }).filter(x=>x.sum!==0).sort((a,b)=>b.sum-a.sum);
-  const total = items.reduce((s,x)=>s+x.sum,0);
-  const posTotal = items.reduce((s,x)=> s+Math.max(x.sum,0),0);
-  const head = `<p class="hint">Répartition par catégorie depuis le 1ᵉʳ janvier ${currentYear} (${win} semaine${win>1?'s':''}) — soit ${fmtEUR(total/win)} / semaine au total (notes de crédit déduites).</p>`;
-  if(items.length===0) return head + '<p class="hint">Aucune dépense sur cette période.</p>';
-  return head + wkBreakdownRows(items, posTotal, (sum)=> fmtEUR(sum/win)+'/sem');
+function weekBannersHtml(){
+  let h = '';
+  if(backupDue()){
+    const d = backupDaysAgo();
+    h += `<div class="banner warn">${d === null ? "Tu n'as encore jamais sauvegardé tes données." : 'Dernière sauvegarde : il y a ' + d + ' jours.'} Elles ne sont stockées que sur cet appareil : pense à les sauvegarder.
+      <div class="btn-row" style="margin-top:8px;"><button class="btn outline" id="wkBackupNow" type="button">Sauvegarder maintenant</button><button class="btn secondary" id="wkBackupLater" type="button">Plus tard</button></div></div>`;
+  }
+  const susp = findSuspiciousDates().length;
+  if(susp > 0){
+    h += `<div class="banner warn">${susp} ancienne${susp>1?'s':''} dépense${susp>1?'s':''} ${susp>1?'ont':'a'} peut-être une date inversée (jour ↔ mois) et ${susp>1?'manquent':'manque'} peut-être dans la bonne semaine. <button type="button" class="linklike" id="wkSuspectBtn">Vérifier</button></div>`;
+  }
+  const pend = pendingRefunds();
+  if(pend.length){
+    const tot = pend.reduce((s,e)=> s + e.refund.amount, 0);
+    h += `<p class="hint" style="margin:6px 0;">Remboursements attendus, déjà déduits des dépenses : <strong>${fmtEUR(tot)}</strong> (${pend.length} en attente). <button type="button" class="linklike" id="wkPendingBtn">Voir</button></p>`;
+  }
+  return h;
 }
 
-function weeklyWeekBodyHtml(){
-  const w = selectedWeekIdx();
+function renderWeekTab(){
+  const hero = document.getElementById('weekHero'), kpis = document.getElementById('weekKpis');
+  const extras = document.getElementById('weekExtras'), banners = document.getElementById('weekBanners');
+  if(state.expenses.length === 0 && state.incomes.length === 0){
+    banners.innerHTML = ''; kpis.innerHTML = ''; extras.innerHTML = '';
+    hero.className = 'card';
+    hero.innerHTML = `<div class="empty"><div class="big">Bienvenue</div>Encode ta première dépense avec le bouton « + » (ou un revenu dans l'onglet Revenus) pour suivre ta semaine.</div>`;
+    return;
+  }
+  hero.className = 'weekly-highlight';
+  const map = buildWeekMap();
   const {minW, curW} = weekBounds();
-  const exps = weekExpenses(w);
-  const total = exps.reduce((s,e)=>s+e.amount,0);
-  const cats = state.categories.filter(c=> exps.some(e=>e.categoryId===c.id));
-  const items = cats.map(c=> ({cat:c, sum: exps.filter(e=>e.categoryId===c.id).reduce((s,e)=>s+e.amount,0)}))
-    .sort((a,b)=>b.sum-a.sum);
-  const nav = `<div class="wk-nav">
-    <button class="wk-arrow" id="whMPrev" type="button" aria-label="Semaine précédente" ${w<=minW?'disabled':''}>‹</button>
-    <strong>${w===curW?'Cette semaine · ':''}${weekRangeLabel(w)}</strong>
-    <button class="wk-arrow" id="whMNext" type="button" aria-label="Semaine suivante" ${w>=curW?'disabled':''}>›</button>
-  </div>`;
-  const head = `<p class="hint" style="margin-top:2px;">Total de la semaine : <strong>${fmtEUR(total)}</strong> · ${exps.length} dépense${exps.length>1?'s':''}.</p>`;
-  if(exps.length===0) return nav + head + '<p class="hint">Aucune dépense cette semaine-là.</p>';
-  const list = exps.map(e=>{
+  const selW = selectedWeekIdx();
+  const st = weekAgg(map, selW), obj = weeklyObjective(), isCur = selW === curW;
+
+  banners.innerHTML = weekBannersHtml();
+  const g = id => document.getElementById(id);
+  if(g('wkBackupNow')) g('wkBackupNow').onclick = ()=> exportJsonBackup();
+  if(g('wkBackupLater')) g('wkBackupLater').onclick = ()=>{ state.settings.backupSnoozeUntil = Date.now() + 3*86400000; saveState(); renderWeekTab(); };
+  if(g('wkSuspectBtn')) g('wkSuspectBtn').onclick = openDateAuditModal;
+  if(g('wkPendingBtn')) g('wkPendingBtn').onclick = showPendingRefunds;
+
+  // ---- hero : navigation + what is left to spend
+  let opts = '';
+  for(let w=curW; w>=minW; w--){
+    opts += `<option value="${w}" ${w===selW?'selected':''}>${escapeHtml(weekRangeLabel(w) + (w===curW ? ' (en cours)' : '') + ' · ' + fmtEURShort(weekAgg(map, w).spent))}</option>`;
+  }
+  const nav = `<div class="wh-weeknav">
+      <button class="wh-arrow" id="wkPrev" type="button" aria-label="Semaine précédente" ${selW<=minW?'disabled':''}>‹</button>
+      <select id="wkSelect" aria-label="Choisir une semaine">${opts}</select>
+      <button class="wh-arrow" id="wkNext" type="button" aria-label="Semaine suivante" ${selW>=curW?'disabled':''}>›</button>
+    </div>`;
+  let head;
+  if(obj){
+    const rest = r2(obj.value - st.flex), pct = obj.value > 0 ? st.flex / obj.value * 100 : 0, over = rest < 0;
+    head = `<span class="wh-label">${isCur ? 'Reste à dépenser cette semaine' : "Reste sur l'objectif de cette semaine-là"}</span>
+      <span class="week-big">${over ? '−' + fmtEUR(-rest) : fmtEUR(rest)}</span>
+      <div class="week-bar${over?' over':''}"><div style="width:${Math.min(100, pct)}%"></div></div>
+      <span class="wh-sub">${over ? 'Objectif dépassé de ' + fmtEUR(-rest) + '. ' : ''}Compressibles : <strong>${fmtEUR(st.flex)}</strong> sur ${fmtEUR(obj.value)} (${pct.toFixed(0)} %)</span>`;
+  } else {
+    head = `<span class="wh-label">${isCur ? 'Dépensé cette semaine' : 'Dépensé cette semaine-là'} (courant)</span>
+      <span class="week-big">${fmtEUR(st.ordinary)}</span>
+      <span class="wh-sub">Pas encore d'objectif : fixe des budgets dans l'onglet Budget.</span>`;
+  }
+  hero.innerHTML = nav + `<div class="week-body">${head}<span class="wh-sub">Fixes : ${fmtEUR(st.fixed)} · Exceptionnelles : ${fmtEUR(st.exc)}</span></div>`;
+  g('wkPrev').onclick = ()=> setSelectedWeek(selW-1);
+  g('wkNext').onclick = ()=> setSelectedWeek(selW+1);
+  g('wkSelect').onchange = (ev)=> setSelectedWeek(parseInt(ev.target.value, 10));
+
+  // ---- income and balance of the week
+  kpis.innerHTML = `<div class="kpi-row" style="margin-top:12px;">
+      <div class="kpi"><div class="label">Revenus reçus</div><div class="value gain">${fmtEUR(st.income)}</div></div>
+      <div class="kpi"><div class="label">Solde de la semaine</div><div class="value ${st.balance>=0?'gain':'loss'}">${fmtEURSigned(st.balance)}</div></div>
+    </div>`;
+  fitKpiValues();
+
+  // ---- details
+  const exps = weekExpenses(selW);
+  const catSums = {};
+  exps.forEach(e=>{ catSums[e.categoryId] = (catSums[e.categoryId]||0) + e.amount; });
+  const items = Object.keys(catSums).map(id=> ({cat:catById(id), sum:catSums[id]})).sort((a,b)=> b.sum - a.sum);
+  const posTotal = items.reduce((s,x)=> s + Math.max(x.sum,0), 0);
+  const typ = typicalWeek(map);
+  let typHtml = '';
+  if(typ){
+    const cmp = typ.median > 0 ? (st.ordinary - typ.median) / typ.median * 100 : null;
+    typHtml = `<div class="card"><p class="hint" style="margin:0;">Semaine typique : <strong>${fmtEUR(typ.median)}</strong> (médiane) · moyenne ${fmtEUR(typ.mean)}, sur les ${typ.n} dernières semaines complètes, dépenses exceptionnelles exclues.
+      ${cmp !== null && Math.abs(cmp) >= 1 ? `<br>Cette semaine-là : <strong>${cmp>0?'▲':'▼'} ${Math.abs(cmp).toFixed(0)} %</strong> par rapport à la semaine typique.` : ''}</p></div>`;
+  }
+  const big = bigCandidates();
+  let html = `<h2 class="section-title">Par catégorie<span class="rule"></span></h2><div class="card">` +
+    (items.length ? wkBreakdownRows(items, posTotal, (sum)=> fmtEUR(sum)).replace(/^<div style="margin-top:14px;">/, '<div>') : '<p class="hint" style="margin:0;">Aucune dépense cette semaine-là.</p>') + `</div>`;
+  html += `<h2 class="section-title">12 dernières semaines<span class="rule"></span></h2>
+    <div class="card"><div class="hint" style="margin:0 0 4px;">Dépenses compressibles (ce que tu contrôles)${obj ? ' et objectif (pointillés)' : ''}</div>
+    <div class="chart-wrap"><canvas id="chartWeeks"></canvas></div>
+    <div class="hint" style="margin:14px 0 4px;">Revenus reçus</div>
+    <div class="chart-wrap" style="height:150px;"><canvas id="chartWeeksInc"></canvas></div>
+    <p class="hint" style="margin:6px 0 0;">Touche une barre pour afficher cette semaine.</p></div>` + typHtml;
+  html += `<details class="card" id="weekDetails"><summary>Détail des dépenses (${exps.length})</summary><div id="weekExpList" style="margin-top:8px;"></div></details>`;
+  html += `<div class="btn-row" style="margin-top:4px;">
+      <button class="btn outline" id="wkAvgBtn" type="button">Répartition moyenne depuis le 1ᵉʳ janvier</button>
+      ${big.length ? `<button class="btn outline" id="wkBigBtn" type="button">Marquer des achats exceptionnels (${big.length})</button>` : ''}
+    </div>`;
+  extras.innerHTML = html;
+  g('wkAvgBtn').onclick = openWeeklyAvgModal;
+  if(g('wkBigBtn')) g('wkBigBtn').onclick = openBigPurchasesModal;
+
+  const listEl = g('weekExpList');
+  listEl.innerHTML = exps.length ? exps.map(e=>{
     const c = catById(e.categoryId);
     return `<div class="list-item">
       <div class="dot" style="background:${c.color}"></div>
       <div class="body">
         <div class="row1"><span class="desc">${escapeHtml(e.description)}</span><span class="amount${e.amount<0?' credit':''}">${fmtEUR(e.amount)}</span></div>
-        <div class="meta">${fmtDateFR(e.date)} · ${escapeHtml(c.name)}${e.amount<0?' · <span class="cr-tag">note de crédit</span>':''}${e.refund?' · payé '+fmtEUR(e.paid)+', remboursement '+(e.refund.status==='pending'?'attendu ':'reçu ')+fmtEUR(e.refund.amount):''}</div>
+        <div class="meta">${fmtDateFR(e.date)} · ${escapeHtml(c.name)}${e.amount<0?' · <span class="cr-tag">note de crédit</span>':''}${isExceptional(e)?' · <span class="exc-tag">exceptionnelle</span>':''}${e.refund?' · payé '+fmtEUR(e.paid)+', remboursement '+(e.refund.status==='pending'?'attendu ':'reçu ')+fmtEUR(e.refund.amount):''}</div>
+        <div class="actions"><button data-act="edit" data-id="${e.id}">Modifier</button></div>
       </div>
     </div>`;
-  }).join('');
-  const posTotal = items.reduce((s,x)=> s+Math.max(x.sum,0),0);
-  return nav + head + wkBreakdownRows(items, posTotal, (sum)=> fmtEUR(sum))
-    + `<h2 class="section-title" style="margin-top:22px;">Dépenses de la semaine<span class="rule"></span></h2>` + list;
+  }).join('') : '<p class="hint" style="margin:0;">Aucune dépense.</p>';
+  listEl.querySelectorAll('button[data-act="edit"]').forEach(b=> b.addEventListener('click', ()=> editExpense(b.dataset.id)));
+
+  drawWeeksChart(map, selW, minW, obj);
 }
 
-function renderWeeklyModalBody(){
-  const body = document.getElementById('whModalBody');
-  if(!body) return;
-  document.querySelectorAll('#whModalPills .pill').forEach(p=> p.classList.toggle('active', p.dataset.mode===weeklyModalMode));
-  const nSuspect = findSuspiciousDates().length;
-  const suspectBanner = nSuspect>0
-    ? `<div class="banner warn">⚠ ${nSuspect} ancienne${nSuspect>1?'s':''} dépense${nSuspect>1?'s':''} ${nSuspect>1?'ont':'a'} peut-être une date inversée (jour ↔ mois) et ${nSuspect>1?'manquent':'manque'} peut-être dans la bonne semaine.<br><button class="btn outline" id="whSuspectBtn" type="button" style="margin-top:8px;">Vérifier ces dates</button></div>`
-    : '';
-  if(weeklyModalMode==='avg'){
-    body.innerHTML = suspectBanner + weeklyAvgBodyHtml();
-  } else {
-    body.innerHTML = suspectBanner + weeklyWeekBodyHtml();
-    const w = selectedWeekIdx();
-    const prev = document.getElementById('whMPrev'), next = document.getElementById('whMNext');
-    if(prev) prev.onclick = ()=>{ setSelectedWeek(w-1); renderWeeklyModalBody(); };
-    if(next) next.onclick = ()=>{ setSelectedWeek(w+1); renderWeeklyModalBody(); };
+function drawWeeksChart(map, selW, minW, obj){
+  destroyChart('weeks'); destroyChart('weeksInc');
+  if(!chartsAvailable()) return;
+  const {inkSoft, line} = chartFonts();
+  const weeks = [];
+  for(let w=Math.max(minW, selW-11); w<=selW; w++) weeks.push(w);
+  const aggs = weeks.map(w=> weekAgg(map, w));
+  const labels = weeks.map(weekStartLabel);
+  const common = (legend)=> ({
+    responsive:true, maintainAspectRatio:false,
+    onClick:(evt, els, chart)=>{
+      const pts = chart.getElementsAtEventForMode(evt, 'nearest', {intersect:true}, true);
+      if(pts.length) setSelectedWeek(weeks[pts[0].index]);
+    },
+    plugins:{legend:{display:legend, labels:{color:inkSoft, font:{size:11}, boxWidth:10}}, tooltip:{callbacks:{label:(c)=> c.dataset.label+': '+fmtEUR(c.raw)}}},
+    scales:{
+      x:{ticks:{color:inkSoft, font:{size:10}, maxRotation:60, minRotation:0}, grid:{display:false}},
+      y:{beginAtZero:true, ticks:{color:inkSoft, font:{size:10}, callback:(v)=> v>=1000 ? (v/1000)+'k' : v}, grid:{color:line}}
+    }
+  });
+  const c1 = document.getElementById('chartWeeks');
+  if(c1){
+    const datasets = [{label:'Compressibles', data:aggs.map(a=> a.flex), borderRadius:3,
+      backgroundColor:aggs.map(a=> a.w===selW ? getVar('--loss') : getVar('--loss')+'B3')}];
+    if(obj) datasets.push({label:'Objectif', data:aggs.map(()=> Math.round(obj.value*100)/100), type:'line', borderColor:getVar('--ink-soft'), borderDash:[5,4], pointRadius:0, borderWidth:2});
+    charts.weeks = new Chart(c1.getContext('2d'), {type:'bar', data:{labels, datasets}, options:common(!!obj)});
   }
-  const sb = document.getElementById('whSuspectBtn');
-  if(sb) sb.onclick = openDateAuditModal;
+  const c2 = document.getElementById('chartWeeksInc');
+  if(c2){
+    charts.weeksInc = new Chart(c2.getContext('2d'), {type:'bar',
+      data:{labels, datasets:[{label:'Revenus', data:aggs.map(a=> a.income), borderRadius:3,
+        backgroundColor:aggs.map(a=> a.w===selW ? getVar('--gain') : getVar('--gain')+'B3')}]},
+      options:common(false)});
+  }
 }
 
-function openWeeklyModal(mode){
-  if(weeklyHighlightStartIdx===null) return;
-  weeklyModalMode = mode;
+// Average weekly spending per category since 1 January (exceptional purchases left out)
+function weeklyAvgBodyHtml(){
+  const currentYear = new Date().getFullYear();
+  const startIdx = weekIndex(currentYear+'-01-01'), endIdx = weekIndex(todayISO());
+  const win = endIdx - startIdx + 1;
+  const cats = state.categories.filter(c=> state.expenses.some(e=>e.categoryId===c.id));
+  const items = cats.map(c=>{
+    const sum = state.expenses
+      .filter(e=> e.categoryId===c.id && !isExceptional(e) && weekIndex(e.date)>=startIdx && weekIndex(e.date)<=endIdx)
+      .reduce((s,e)=>s+e.amount,0);
+    return {cat:c, sum};
+  }).filter(x=>x.sum!==0).sort((a,b)=>b.sum-a.sum);
+  const total = items.reduce((s,x)=>s+x.sum,0);
+  const posTotal = items.reduce((s,x)=> s+Math.max(x.sum,0),0);
+  const head = `<p class="hint">Répartition par catégorie depuis le 1ᵉʳ janvier ${currentYear} (${win} semaine${win>1?'s':''}) — soit ${fmtEUR(total/win)} / semaine au total, notes de crédit déduites, dépenses exceptionnelles exclues.</p>`;
+  if(items.length===0) return head + '<p class="hint">Aucune dépense sur cette période.</p>';
+  return head + wkBreakdownRows(items, posTotal, (sum)=> fmtEUR(sum/win)+'/sem');
+}
+function openWeeklyAvgModal(){
   const old = document.getElementById('whModalOverlay');
   if(old) old.remove();
   const overlay = document.createElement('div');
@@ -2120,26 +2632,56 @@ function openWeeklyModal(mode){
   overlay.id = 'whModalOverlay';
   overlay.innerHTML = `<div class="modal">
     <button class="modal-close" id="whModalClose" type="button">&times;</button>
-    <h3>Ta dépense hebdomadaire</h3>
-    <div class="year-pills" id="whModalPills" style="margin:10px 0 6px;">
-      <div class="pill" data-mode="week">Semaine choisie</div>
-      <div class="pill" data-mode="avg">Moyenne annuelle</div>
-    </div>
-    <div id="whModalBody"></div>
+    <h3>Ta dépense hebdomadaire moyenne</h3>
+    <div id="whModalBody">${weeklyAvgBodyHtml()}</div>
   </div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener('click', (ev)=>{ if(ev.target===overlay) overlay.remove(); });
   document.getElementById('whModalClose').addEventListener('click', ()=> overlay.remove());
-  overlay.querySelectorAll('#whModalPills .pill').forEach(p=> p.addEventListener('click', ()=>{
-    weeklyModalMode = p.dataset.mode;
-    renderWeeklyModalBody();
-  }));
-  renderWeeklyModalBody();
+}
+
+// Big purchases : propose to mark them as exceptional (kept out of the weekly control, kept everywhere else)
+function openBigPurchasesModal(){
+  const list = bigCandidates().slice(0, 40);
+  const old = document.getElementById('bigOverlay');
+  if(old) old.remove();
+  const th = state.settings.bigThreshold || 300;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'bigOverlay';
+  overlay.innerHTML = `<div class="modal">
+    <button class="modal-close" id="bgClose" type="button">&times;</button>
+    <h3>Achats exceptionnels</h3>
+    <p class="hint">Dépenses de ${fmtEUR(th)} ou plus. Coche celles qui sont ponctuelles (matériel, assurance annuelle, opticien…) : elles ne comptent plus dans l'objectif ni dans la semaine typique, mais restent comptées dans les budgets et l'année. Les lignes non cochées ne seront plus proposées.</p>
+    <div id="bgList">${list.map(e=>{
+      const c = catById(e.categoryId);
+      return `<label class="chk" style="margin-top:10px;"><input type="checkbox" data-id="${e.id}"><span><strong>${escapeHtml(e.description)}</strong> · ${fmtEUR(e.amount)}<br><span style="color:var(--ink-soft); font-size:0.76rem;">${fmtDateFR(e.date)} · ${escapeHtml(c.name)}</span></span></label>`;
+    }).join('') || '<p class="hint">Aucune dépense à examiner.</p>'}</div>
+    <div class="btn-row">
+      <button class="btn" id="bgApply" type="button">Enregistrer</button>
+      <button class="btn secondary" id="bgCancel" type="button">Fermer</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const g = id => document.getElementById(id);
+  overlay.addEventListener('click', (ev)=>{ if(ev.target===overlay) overlay.remove(); });
+  g('bgClose').addEventListener('click', ()=> overlay.remove());
+  g('bgCancel').addEventListener('click', ()=> overlay.remove());
+  g('bgApply').addEventListener('click', ()=>{
+    let marked = 0;
+    list.forEach(e=>{
+      const cb = overlay.querySelector('input[data-id="'+e.id+'"]');
+      if(cb && cb.checked){ e.exceptional = true; marked++; }
+      e.excReviewed = true;
+    });
+    overlay.remove();
+    afterDateChange();
+    toast(marked + ' achat' + (marked>1?'s':'') + ' marqué' + (marked>1?'s':'') + ' comme exceptionnel' + (marked>1?'s':'') + '.', 'ok');
+  });
 }
 
 /* ============================= DASHBOARD ============================= */
 function renderDashboard(){
-  renderWeeklyHighlight();
   const years = allYearsInData();
   if(state.expenses.length===0 && state.incomes.length===0){
     document.getElementById('dashEmpty').innerHTML = `<div class="empty" style="margin-top:30px;">
@@ -2390,25 +2932,12 @@ function drawCategoryDonut(year, total){
 }
 function getVar(name){ return getComputedStyle(document.body).getPropertyValue(name).trim(); }
 
-/* ============================= SIMULATOR ============================= */
+/* ============================= WEEK / MONTH HELPERS ============================= */
 function weekIndex(dateStr){
   // Calendar weeks Monday→Sunday; timezone-safe (pure UTC day arithmetic).
   const p = String(dateStr).split('-');
   const days = Math.floor(Date.UTC(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10))/86400000);
   return Math.floor((days+3)/7);
-}
-function weeklySeriesForCategory(catId){
-  if(state.expenses.length===0) return [];
-  let minW=Infinity, maxW=-Infinity;
-  state.expenses.forEach(e=>{ const w=weekIndex(e.date); if(w<minW)minW=w; if(w>maxW)maxW=w; });
-  const totals = {};
-  state.expenses.filter(e=> catId==='all' || e.categoryId===catId).forEach(e=>{
-    const w = weekIndex(e.date);
-    totals[w] = (totals[w]||0) + e.amount;
-  });
-  const series = [];
-  for(let w=minW; w<=maxW; w++) series.push(totals[w]||0);
-  return series;
 }
 function mean(arr){ return arr.reduce((a,b)=>a+b,0)/(arr.length||1); }
 function stddev(arr){
@@ -2444,157 +2973,7 @@ function monthlyNetHistory(){
   });
 }
 
-function runMultiCategorySimulation(catCapMap, goal, iterations){
-  iterations = iterations || 3000;
-  const seriesByCat = {};
-  Object.keys(catCapMap).forEach(catId=>{ seriesByCat[catId] = weeklySeriesForCategory(catId); });
-  const validCats = Object.keys(catCapMap).filter(c=> seriesByCat[c].length >= 4);
-  const insufficientCats = Object.keys(catCapMap).filter(c=> seriesByCat[c].length < 4);
-  if(validCats.length===0) return {insufficient:true, insufficientCats};
-  const results = [];
-  for(let i=0;i<iterations;i++){
-    let totalBaseline=0, totalCapped=0;
-    validCats.forEach(catId=>{
-      const series = seriesByCat[catId];
-      const n = series.length;
-      const cap = catCapMap[catId];
-      for(let w=0; w<52; w++){
-        const val = series[(Math.random()*n)|0];
-        totalBaseline += val;
-        totalCapped += Math.min(val, cap);
-      }
-    });
-    results.push(totalBaseline-totalCapped);
-  }
-  results.sort((a,b)=>a-b);
-  const pct = p => results[Math.max(0,Math.min(results.length-1, Math.floor(p*(results.length-1))))];
-  const probGoal = (goal!==null && !isNaN(goal)) ? results.filter(r=>r>=goal).length/results.length : null;
-  return {
-    insufficient:false, insufficientCats, validCats,
-    mean:mean(results), p10:pct(0.10), p50:pct(0.50), p90:pct(0.90),
-    probGoal
-  };
-}
 
-function renderSimulator(){
-  const wrap = document.getElementById('simContent');
-  const allCats = state.categories.filter(c=> state.expenses.some(e=>e.categoryId===c.id));
-  const cats = allCats.filter(c=> c.flexible !== false);
-  const fixedCats = allCats.filter(c=> c.flexible === false);
-  if(state.expenses.length < 4){
-    wrap.innerHTML = `<div class="empty" style="margin-top:20px;">
-      <div class="big">Pas encore assez de données</div>
-      Encode au moins quelques semaines de dépenses pour que le simulateur puisse estimer ton potentiel d'épargne de façon fiable.
-    </div>`;
-    return;
-  }
-  cats.forEach(c=>{
-    if(simCapDraftMap[c.id]===undefined){
-      const avg = mean(weeklySeriesForCategory(c.id));
-      simCapDraftMap[c.id] = Math.round(avg*0.8*100)/100;
-    }
-  });
-
-  const fixedTotal = fixedCats.reduce((s,c)=> s + mean(weeklySeriesForCategory(c.id)), 0);
-  const fixedListHtml = fixedCats.length ? `
-    <h2 class="section-title">Dépenses fixes (non modifiables)<span class="rule"></span></h2>
-    <p class="hint">Ces catégories sont marquées "Fixe" dans l'onglet Catégories — elles ne dépendent pas de toi (taxes, charges imposées…) et sont donc exclues du simulateur. Change leur statut dans Catégories si besoin.</p>
-    <div class="card">
-      ${fixedCats.map(c=>{
-        const avg = mean(weeklySeriesForCategory(c.id));
-        return `<div class="list-item">
-          <div class="dot" style="background:${c.color}"></div>
-          <div class="body"><div class="row1"><span class="desc">${escapeHtml(c.name)}</span><span class="amount">${fmtEUR(avg)}/sem</span></div></div>
-        </div>`;
-      }).join('')}
-      <p class="hint" style="margin:10px 0 0;">Total fixe estimé : ${fmtEUR(fixedTotal)} / semaine, hors de portée du simulateur.</p>
-    </div>` : '';
-
-  wrap.innerHTML = `
-    <h2 class="section-title">Simulateur d'épargne<span class="rule"></span></h2>
-    <p class="hint">Basé sur un tirage aléatoire (bootstrap) de tes propres semaines de dépenses passées, catégorie par catégorie — pas une formule inventée. Ajuste le plafond de chaque catégorie compressible, puis lance la simulation pour voir l'effet combiné.</p>
-    <div class="card">
-      <div id="simCatSliders"></div>
-      <label for="simGoal">Objectif d'épargne totale en fin d'année (optionnel)</label>
-      <input type="number" id="simGoal" step="10" min="0" placeholder="Ex. 500">
-      <button class="btn block" id="simRunBtn" type="button">Lancer la simulation</button>
-    </div>
-    <div id="simResultBox"></div>
-
-    ${fixedListHtml}
-
-    <h2 class="section-title">Projection de ton épargne cumulée<span class="rule"></span></h2>
-    <p class="hint">Ton solde de référence (Réglages) est celui d'aujourd'hui. Les mois passés sont recalculés à rebours à partir de ce point avec tes flux réels — ils reflètent donc ton solde tel qu'il était à l'époque, pas ton solde actuel.</p>
-    <div class="card"><div class="chart-wrap tall"><canvas id="chartProjection"></canvas></div></div>
-    <div id="projectionNote"></div>
-  `;
-
-  const slidersWrap = document.getElementById('simCatSliders');
-  if(cats.length===0){
-    slidersWrap.innerHTML = "<p class=\"hint\" style=\"margin:0;\">Aucune catégorie compressible pour l'instant. Marque au moins une catégorie \"Compressible\" dans l'onglet Catégories pour pouvoir simuler une économie.</p>";
-  } else {
-  slidersWrap.innerHTML = cats.map(c=>{
-    const series = weeklySeriesForCategory(c.id);
-    const avg = mean(series);
-    const cap = simCapDraftMap[c.id];
-    const maxRange = Math.max(20, Math.ceil(avg*2)||20);
-    return `<div class="sim-cat-row" style="border-left:3px solid ${c.color}; padding-left:10px; margin-bottom:14px;">
-      <div class="sim-cat-head" style="display:flex; justify-content:space-between; align-items:baseline; font-size:0.85rem;">
-        <strong>${escapeHtml(c.name)}</strong>
-        <span style="color:var(--ink-soft); font-size:0.72rem;">moy. ${fmtEUR(avg)}/sem · ${series.length} sem.</span>
-      </div>
-      <div class="slider-row">
-        <input type="range" class="simCatRange" data-cat="${c.id}" min="0" max="${maxRange}" step="1" value="${cap}">
-        <span class="slider-val" id="simCatVal_${c.id}">${fmtEUR(cap)}</span>
-      </div>
-      ${series.length<8?'<div class="banner warn" style="margin-top:4px; padding:7px 10px; font-size:0.75rem;">Moins de 8 semaines de données : tendance grossière.</div>':''}
-    </div>`;
-  }).join('');
-  slidersWrap.querySelectorAll('.simCatRange').forEach(inp=>{
-    inp.addEventListener('input', (ev)=>{
-      const catId = ev.target.dataset.cat;
-      const v = parseFloat(ev.target.value);
-      simCapDraftMap[catId] = v;
-      document.getElementById('simCatVal_'+catId).textContent = fmtEUR(v);
-    });
-  });
-  }
-
-  document.getElementById('simRunBtn').addEventListener('click', ()=>{
-    if(cats.length===0){
-      document.getElementById('simResultBox').innerHTML = "<div class=\"banner warn\">Aucune catégorie compressible à simuler. Marque au moins une catégorie \"Compressible\" dans l'onglet Catégories.</div>";
-      return;
-    }
-    const goalVal = parseFloat(document.getElementById('simGoal').value);
-    simGoal = isNaN(goalVal) ? null : goalVal;
-    executeSimulation(cats);
-  });
-
-  drawProjectionChart();
-}
-function executeSimulation(cats){
-  const box = document.getElementById('simResultBox');
-  const catCapMap = {};
-  cats.forEach(c=>{ catCapMap[c.id] = simCapDraftMap[c.id]; });
-  const res = runMultiCategorySimulation(catCapMap, simGoal);
-  if(res.insufficient){
-    box.innerHTML = `<div class="banner warn">Pas assez de semaines de données pour lancer une simulation fiable sur ces catégories (minimum 4 semaines chacune).</div>`;
-    return;
-  }
-  const skipped = res.insufficientCats.length ? `<p class="hint">Catégorie(s) exclue(s) du calcul faute de données suffisantes : ${res.insufficientCats.map(id=>escapeHtml(catById(id).name)).join(', ')}.</p>` : '';
-  box.innerHTML = `
-    <div class="card ledger">
-      <div class="kpi-row">
-        <div class="kpi"><div class="label">Épargne totale médiane estimée /an</div><div class="value gain">${fmtEUR(res.p50)}</div></div>
-        <div class="kpi"><div class="label">Fourchette probable (P10–P90)</div><div class="value">${fmtEUR(res.p10)} – ${fmtEUR(res.p90)}</div></div>
-      </div>
-      ${res.probGoal!==null?`<div class="banner">Probabilité estimée d'atteindre au moins ${fmtEUR(simGoal)} d'épargne sur l'année en tenant tous ces plafonds : <strong>${(res.probGoal*100).toFixed(0)}%</strong>.</div>`:''}
-      ${skipped}
-      <p class="hint" style="margin-top:10px;">Méthode : pour chaque catégorie, ses propres semaines réelles sont tirées au hasard (avec remise) pour simuler 52 semaines, comparées avec et sans le plafond fixé, puis les résultats de toutes les catégories sont additionnés sur 3000 scénarios. P10 et P90 délimitent la plage dans laquelle tombent 80% des scénarios simulés. Cette méthode suppose les catégories indépendantes les unes des autres.</p>
-    </div>
-  `;
-  fitKpiValues();
-}
 function drawProjectionChart(){
   destroyChart('projection');
   const {inkSoft, line} = chartFonts();
@@ -2724,10 +3103,7 @@ function repairImportedDates(silent){
   if(fixedCount>0){
     saveState();
     if(!silent) toast(fixedCount+' date(s) corrigée(s) sur '+batchesFixed+' import(s).', 'ok');
-    refreshYearFilters();
-    renderExpensesList();
-    renderDashboard();
-    if(currentTab==='sim') renderSimulator();
+    refreshViews();
   } else if(!silent){
     toast('Aucune date corrompue détectée.', 'ok');
   }
@@ -2770,15 +3146,6 @@ function findSuspiciousDates(){
     else if(isValidISO(e.date) && e.date <= today && e.date > runningMax) runningMax = e.date;
   });
   return out;
-}
-function afterDateChange(){
-  saveState();
-  refreshYearFilters();
-  renderExpensesList();
-  renderDashboard();
-  renderCategoriesTab();
-  if(currentTab==='sim') renderSimulator();
-  if(document.getElementById('whModalBody')) renderWeeklyModalBody();
 }
 function openDateAuditModal(){
   const old = document.getElementById('dateAuditOverlay');
@@ -2837,7 +3204,7 @@ function renderDateAudit(){
   });
 }
 
-const APP_BUILD = '2026-10-30-b';
+const APP_BUILD = '2026-10-30-v2';
 function setupSettings(){
   document.getElementById('buildInfo').textContent = 'Version ' + APP_BUILD + '. Si ton téléphone affiche une ancienne version après une mise à jour, ce bouton force le rechargement.';
   document.getElementById('reloadAppBtn').addEventListener('click', ()=>{
@@ -2852,11 +3219,11 @@ function setupSettings(){
     state.settings.startingBalance = isNaN(v) ? 0 : v;
     saveState();
     toast('Solde de référence enregistré.', 'ok');
-    if(currentTab==='sim') renderSimulator();
+    if(currentTab==='categories') renderCategoriesTab();
   });
   document.getElementById('exportExpBtn').addEventListener('click', exportExpensesCSV);
   document.getElementById('exportIncBtn').addEventListener('click', exportIncomesCSV);
-  document.getElementById('exportSalBtn').addEventListener('click', exportSalaryCSV);
+  document.getElementById('exportBudBtn').addEventListener('click', exportBudgetsCSV);
   const fmtSel = document.getElementById('csvFormatSel');
   fmtSel.value = csvFormat();
   fmtSel.addEventListener('change', ()=>{ state.settings.csvFormat = fmtSel.value === 'comma' ? 'comma' : 'fr'; saveState(); toast('Format enregistré.', 'ok'); });
@@ -2896,44 +3263,6 @@ function isIOSDevice(){
 }
 // Used when the page runs outside Claude (e.g. GitHub Pages): iPhone/iPad → native share sheet ("Enregistrer dans Fichiers",
 // also works from a Home Screen app); everywhere else → classic download. No await before navigator.share (needs the tap).
-async function fallbackDownload(filename, text){
-  const isCsv = /\.csv$/i.test(filename);
-  const mime = isCsv ? 'text/csv;charset=utf-8' : 'application/json;charset=utf-8';
-  const blob = new Blob([isCsv ? '\ufeff' + text : text], {type:mime});     // BOM so Numbers/Excel read the accents
-  if(isIOSDevice() && typeof File === 'function' && navigator.canShare && navigator.share){
-    try{
-      const file = new File([blob], filename, {type:mime});
-      if(navigator.canShare({files:[file]})){
-        await navigator.share({files:[file], title:filename});
-        toast('Fichier exporté.', 'ok');
-        return;
-      }
-    }catch(e){
-      if(e && e.name === 'AbortError') return;          // the user closed the share sheet
-    }
-  }
-  try{
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename; a.style.display = 'none';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=> URL.revokeObjectURL(url), 5000);
-    toast('Fichier téléchargé.', 'ok');
-  }catch(e){
-    console.error(e);
-    toast("L'export a échoué.", 'err');
-  }
-}
-async function offerDownload(filename, text){
-  if(!downloadsCap){ return fallbackDownload(filename, text); }
-  try{
-    await downloadsCap.save({filename, data:text});
-    toast('Fichier enregistré.', 'ok');
-  }catch(e){
-    if(e && e.code==='declined'){ /* user cancelled, no toast needed */ }
-    else { console.error(e); toast("L'export a échoué.", 'err'); }
-  }
-}
 function csvFormat(){ return state.settings.csvFormat === 'comma' ? 'comma' : 'fr'; }
 function csvSep(){ return csvFormat() === 'fr' ? ';' : ','; }
 function csvNum(n){ const s = Number(n).toFixed(2); return csvFormat() === 'fr' ? s.replace('.', ',') : s; }
@@ -2944,30 +3273,20 @@ function csvEscape(v){
 }
 function buildCsv(rows){ const sep = csvSep(); return rows.map(r=> r.map(csvEscape).join(sep)).join('\n'); }
 function exportExpensesCSV(){
-  const rows = [['Date','Description','Catégorie','Montant payé','Remboursement','Statut du remboursement','Date du remboursement','Source du remboursement']];
+  const rows = [['Date','Description','Catégorie','Montant payé','Remboursement','Statut du remboursement','Date du remboursement','Source du remboursement','Exceptionnelle']];
   state.expenses.slice().sort((a,b)=>a.date.localeCompare(b.date)).forEach(e=>{
     const rf = e.refund;
     rows.push([e.date, e.description, catById(e.categoryId).name, csvNum(expensePaid(e)),
-      rf ? csvNum(rf.amount) : '', rf ? (rf.status === 'received' ? 'reçu' : 'attendu') : '', rf && rf.date ? rf.date : '', rf ? rf.source : '']);
+      rf ? csvNum(rf.amount) : '', rf ? (rf.status === 'received' ? 'reçu' : 'attendu') : '', rf && rf.date ? rf.date : '', rf ? rf.source : '', isExceptional(e) ? 'oui' : '']);
   });
   offerDownload('depenses.csv', buildCsv(rows));
 }
 function exportIncomesCSV(){
-  const rows = [['Année','Date de réception','Source','Fréquence','Montant']];
+  const rows = [['Année','Date de réception','Source','Fréquence','Montant','Salaire','Mois du salaire']];
   state.incomes.slice().sort((a,b)=> incomeSortKey(a).localeCompare(incomeSortKey(b))).forEach(i=>{
-    rows.push([i.year, i.date||'', i.label, i.frequency==='monthly'?'mensuel':(i.frequency==='once'?'une fois':'annuel'), csvNum(i.amount)]);
+    rows.push([i.year, i.date||'', i.label, i.frequency==='monthly'?'mensuel':(i.frequency==='once'?'une fois':'annuel'), csvNum(i.amount), i.salary ? 'oui' : '', i.salary ? (salaryMonthOf({date:i.date, monthManual:i.salaryMonth}) || '') : '']);
   });
   offerDownload('revenus.csv', buildCsv(rows));
-}
-function exportSalaryCSV(){
-  const rows = [['Date','Montant','Source','Mois du salaire']];
-  state.salaryPayments.slice().sort((a,b)=> a.date.localeCompare(b.date)).forEach(p=>{
-    rows.push([p.date, csvNum(p.amount), p.label||'', salaryMonthOf(p)||'']);
-  });
-  offerDownload('versements-salaire.csv', buildCsv(rows));
-}
-function exportJsonBackup(){
-  offerDownload('grand-livre-sauvegarde.json', JSON.stringify(state, null, 2));
 }
 function handleJsonFile(file){
   const reader = new FileReader();
@@ -2981,6 +3300,7 @@ function handleJsonFile(file){
       if(!state.settings) state.settings = {startingBalance:0, theme:'auto'};
       state.expenses.forEach((e,idx)=>{ if(e.createdAt===undefined) e.createdAt = idx; });
       normalizeSalaryState(state);
+      normalizeV2State(state);
       if(!state.settings.warmPaletteV1){ migrateWarmPalette(state); state.settings.warmPaletteV1 = true; }
       saveState();
       populateCategorySelects();
@@ -3008,18 +3328,25 @@ const IMPORT_SPECS = {
     {k:'refund', label:'Remboursement (facultatif)', names:['remboursement','montant rembourse']},
     {k:'rstatus',label:'Statut du remboursement',    names:['statut du remboursement','statut remboursement']},
     {k:'rdate',  label:'Date du remboursement',      names:['date du remboursement','date remboursement']},
-    {k:'rsource',label:'Source du remboursement',    names:['source du remboursement','source remboursement']} ]},
+    {k:'rsource',label:'Source du remboursement',    names:['source du remboursement','source remboursement']},
+    {k:'exc',    label:'Exceptionnelle (oui/non)',   names:['exceptionnelle','exceptionnel']} ]},
   incomes:{ label:'Revenus', fields:[
     {k:'date',   label:'Date de réception', names:['date de reception','date','reception','jour']},
     {k:'desc',   label:'Source',      names:['source','description','libelle','origine','designation','nom']},
     {k:'amount', label:'Montant',     req:true, names:['montant','amount','somme','valeur','total']},
     {k:'year',   label:'Année (lignes sans date)', names:['annee','year']},
-    {k:'freq',   label:'Fréquence (lignes sans date)', names:['frequence','periodicite']} ]},
+    {k:'freq',   label:'Fréquence (lignes sans date)', names:['frequence','periodicite']},
+    {k:'salflag',label:'Salaire (oui/non)', names:['salaire','versement de salaire']},
+    {k:'month',  label:'Mois du salaire (AAAA-MM)', names:['mois du salaire']} ]},
   salary:{ label:'Versements de salaire', fields:[
     {k:'date',   label:'Date du versement', req:true, names:['date du versement','date de reception','date','versement','jour']},
     {k:'amount', label:'Montant',     req:true, names:['montant','amount','somme','valeur','total']},
     {k:'desc',   label:'Source',      names:['source','description','libelle','employeur','nom']},
-    {k:'month',  label:'Mois du salaire (AAAA-MM)', names:['mois du salaire','mois']} ]}
+    {k:'month',  label:'Mois du salaire (AAAA-MM)', names:['mois du salaire','mois']} ]},
+  budgets:{ label:'Budgets par catégorie', fields:[
+    {k:'cat',    label:'Catégorie', req:true, names:['categorie','category','rubrique','nom']},
+    {k:'budget', label:'Budget annuel', req:true, names:['budget annuel','budget','montant']},
+    {k:'flex',   label:'Compressible (oui/non)', names:['compressible']} ]}
 };
 
 function splitCount(line, d){
@@ -3116,8 +3443,10 @@ function detectImportType(headers){
   const h = headers.map(normKey);
   const has = (...ns)=> ns.some(n=> h.some(x=> x.indexOf(n) !== -1));
   const exact = (...ns)=> ns.some(n=> h.indexOf(n) !== -1);
+  if(has('frequence', 'periodicite') || exact('date de reception', 'annee')) return 'incomes';
   if(has('mois du salaire')) return 'salary';
-  if(has('frequence', 'periodicite') || exact('source', 'date de reception')) return 'incomes';
+  if(exact('source')) return 'incomes';
+  if(exact('budget', 'budget annuel') && !has('date')) return 'budgets';
   return 'expenses';
 }
 function guessMapping(type, headers){
@@ -3135,40 +3464,60 @@ function guessMapping(type, headers){
 }
 function rowFilled(r){ return r.some(c=> String(c||'').trim() !== ''); }
 // A Numbers/Excel file may start with a title or a summary table : look for the row that really is a header.
-function locateCsvTable(rows){
-  let best = null;
+function csvTableOk(type, map){
+  if(type === 'budgets') return map.cat >= 0 && map.budget >= 0;
+  return map.amount >= 0 && (map.date >= 0 || (type === 'incomes' && map.year >= 0));
+}
+// A Numbers/Excel file can hold several tables (a budget summary, then the transactions…) : find them all.
+function locateCsvTables(rows){
+  const found = [];
   rows.forEach((r, i)=>{
     if(r.filter(c=> String(c||'').trim() !== '').length < 2) return;
-    const type = detectImportType(r);
-    const map = guessMapping(type, r);
-    const ok = map.amount >= 0 && (map.date >= 0 || (type === 'incomes' && map.year >= 0));
-    if(!ok) return;
-    const score = Object.keys(map).filter(k=> map[k] >= 0).length;
-    if(!best || score > best.score) best = {i, type, score};
+    const type = detectImportType(r), map = guessMapping(type, r);
+    if(!csvTableOk(type, map)) return;
+    const data = [];
+    for(let k = i + 1; k < rows.length; k++){
+      if(!rowFilled(rows[k])) break;                  // a table ends at the first empty row
+      data.push(rows[k]);
+    }
+    if(data.length === 0) return;
+    found.push({headerIdx:i, type, score:Object.keys(map).filter(k=> map[k] >= 0).length, data});
   });
-  if(!best){
+  const tables = [];
+  found.forEach(t=>{
+    const prev = tables[tables.length - 1];
+    if(prev && t.headerIdx <= prev.headerIdx + prev.data.length) return;   // looks like a header but sits inside the previous table
+    tables.push(t);
+  });
+  if(!tables.length){
     const i = rows.findIndex(r=> r.filter(c=> String(c||'').trim() !== '').length >= 2);
-    if(i < 0) return null;
-    best = {i, type:'expenses', score:0};
+    if(i < 0) return [];
+    const data = [];
+    for(let k = i + 1; k < rows.length; k++){ if(!rowFilled(rows[k])) break; data.push(rows[k]); }
+    if(!data.length) return [];
+    tables.push({headerIdx:i, type:'expenses', score:0, data});
   }
-  const data = [];
-  for(let k = best.i + 1; k < rows.length; k++){
-    if(!rowFilled(rows[k])) break;                  // the table ends at the first empty row
-    data.push(rows[k]);
-  }
-  if(data.length === 0) return null;
-  return {headerIdx:best.i, type:best.type, data};
+  return tables;
+}
+function bestTableIndex(tables){
+  let b = 0;
+  tables.forEach((t, i)=>{ if(t.score > tables[b].score) b = i; });
+  return b;
 }
 
+
 function countMap(keys){ const m = {}; keys.forEach(k=>{ m[k] = (m[k]||0) + 1; }); return m; }
+function truthyCell(v){ return /^(o|x|1|v|y)/.test(normKey(v)); }
 function buildImportPlan(type, map, data, opts){
   const cell = (r, k)=> (map[k] >= 0 && map[k] < r.length) ? r[map[k]] : '';
+  if(type === 'budgets') data = data.filter(r=> normKey(cell(r,'cat')) !== 'total');
   const items = [];
-  let bad = 0, dup = 0;
+  let bad = 0, dup = 0, missing = 0, zero = 0;
   let existing = {};
   if(type === 'expenses') existing = countMap(state.expenses.map(e=> e.date+'|'+e.description.trim().toLowerCase()+'|'+expensePaid(e).toFixed(2)));
   if(type === 'incomes')  existing = countMap(state.incomes.map(i=> i.date ? 'd|'+i.date+'|'+i.label.trim().toLowerCase()+'|'+i.amount.toFixed(2) : 'l|'+i.year+'|'+i.label.trim().toLowerCase()+'|'+i.amount.toFixed(2)+'|'+i.frequency));
-  if(type === 'salary')   existing = countMap(state.salaryPayments.map(p=> p.date+'|'+p.amount.toFixed(2)+'|'+(p.label||'').trim().toLowerCase()));
+  if(type === 'salary')   existing = countMap(state.incomes.filter(i=> i.salary && i.date).map(i=> i.date+'|'+i.amount.toFixed(2)+'|'+(i.label||'').trim().toLowerCase()));
+  if(type === 'budgets')  existing = countMap(state.categories.filter(c=> c.budget > 0).map(c=> 'b|'+c.name.trim().toLowerCase()+'|'+c.budget.toFixed(2)));
   const take = (key, item)=>{
     if(opts.skipDup && existing[key] > 0){ existing[key]--; dup++; return; }
     items.push(item);
@@ -3188,30 +3537,43 @@ function buildImportPlan(type, map, data, opts){
           refund = {amount:Math.min(ra, amount), status:received ? 'received' : 'pending', date:parseFlexibleDate(cell(r,'rdate')) || null, source:String(cell(r,'rsource')||'').trim()};
         }
       }
-      take(date+'|'+desc.toLowerCase()+'|'+amount.toFixed(2), {date, amount, desc, catName:String(cell(r,'cat')||'').trim(), refund});
+      const exceptional = amount > 0 && map.exc >= 0 && truthyCell(cell(r,'exc'));
+      take(date+'|'+desc.toLowerCase()+'|'+amount.toFixed(2), {date, amount, desc, catName:String(cell(r,'cat')||'').trim(), refund, exceptional});
     } else if(type === 'incomes'){
       const amount = parseAmount(cell(r,'amount'));
       if(isNaN(amount) || amount <= 0){ bad++; return; }
       const label = String(cell(r,'desc')||'').trim() || 'Revenu importé';
       const date = map.date >= 0 ? parseFlexibleDate(cell(r,'date')) : null;
       if(date){
-        take('d|'+date+'|'+label.toLowerCase()+'|'+amount.toFixed(2), {date, year:parseInt(date.slice(0,4),10), frequency:'once', label, amount});
+        const sal = map.salflag >= 0 && truthyCell(cell(r,'salflag'));
+        const mo = String(cell(r,'month')||'').trim();
+        take('d|'+date+'|'+label.toLowerCase()+'|'+amount.toFixed(2), {date, year:parseInt(date.slice(0,4),10), frequency:'once', label, amount, salary:sal, salaryMonth:(sal && isYM(mo)) ? mo : null});
       } else {
         const y = parseInt(cell(r,'year'), 10);
         if(!(y >= 1900 && y <= 2200)){ bad++; return; }
         const frequency = normKey(cell(r,'freq')).indexOf('mens') === 0 ? 'monthly' : 'annual';
         take('l|'+y+'|'+label.toLowerCase()+'|'+amount.toFixed(2)+'|'+frequency, {date:null, year:y, frequency, label, amount});
       }
-    } else {
+    } else if(type === 'salary'){
       const date = parseFlexibleDate(cell(r,'date'));
       const amount = parseAmount(cell(r,'amount'));
       if(!date || isNaN(amount) || amount <= 0){ bad++; return; }
       const label = String(cell(r,'desc')||'').trim() || state.settings.salary.employer;
       const month = String(cell(r,'month')||'').trim();
       take(date+'|'+amount.toFixed(2)+'|'+label.toLowerCase(), {date, amount, label, month: isYM(month) ? month : null});
+    } else {
+      const name = String(cell(r,'cat')||'').trim();
+      const b = parseAmount(cell(r,'budget'));
+      if(!name || isNaN(b)){ bad++; return; }
+      if(b <= 0){ zero++; return; }                                   // a budget of 0 € is ignored
+      const known = state.categories.some(c=> c.name.trim().toLowerCase() === name.toLowerCase());
+      if(!known && !opts.createCats){ missing++; return; }
+      let flex = null;
+      if(map.flex >= 0 && String(cell(r,'flex')).trim() !== '') flex = truthyCell(cell(r,'flex'));
+      take('b|'+name.toLowerCase()+'|'+b.toFixed(2), {name, budget:r2(b), flex});
     }
   });
-  return {items, bad, dup, total:data.length};
+  return {items, bad, dup, missing, zero, total:data.length, result:null};
 }
 function executeImport(type, plan){
   const base = Date.now();
@@ -3228,17 +3590,34 @@ function executeImport(type, plan){
       }
       const e = {id:uid('exp'), date:it.date, description:it.desc, categoryId, amount:0, createdAt:base+idx};
       setExpenseRefund(e, it.amount, it.refund);
+      if(it.exceptional) e.exceptional = true;
       state.expenses.push(e);
     });
   } else if(type === 'incomes'){
     plan.items.forEach((it, idx)=>{
-      state.incomes.push({id:uid('inc'), year:it.year, frequency:it.frequency, label:it.label, amount:it.amount, date:it.date, createdAt:base+idx});
+      const inc = {id:uid('inc'), year:it.year, frequency:it.frequency, label:it.label, amount:it.amount, date:it.date, createdAt:base+idx};
+      if(it.salary){ inc.salary = true; inc.salaryMonth = it.salaryMonth || null; }
+      state.incomes.push(inc);
     });
-  } else {
+  } else if(type === 'salary'){
     plan.items.forEach((it, idx)=>{
       const def = salaryRuleMonth(it.date);
-      state.salaryPayments.push({id:uid('sal'), date:it.date, amount:it.amount, label:it.label, monthManual:(it.month && it.month !== def) ? it.month : null, createdAt:base+idx});
+      const monthManual = (it.month && it.month !== def) ? it.month : null;
+      const same = state.incomes.find(i=> i.date === it.date && Math.abs(i.amount - it.amount) < 0.005 && !i.salary);
+      if(same){ same.salary = true; same.salaryMonth = monthManual; return; }                 // already encoded as a revenue : just flag it
+      state.incomes.push({id:uid('inc'), year:parseInt(it.date.slice(0,4),10), frequency:'once', label:it.label, amount:it.amount, date:it.date, salary:true, salaryMonth:monthManual, createdAt:base+idx});
     });
+  } else {
+    let set = 0, created = 0;
+    plan.items.forEach(it=>{
+      let c = state.categories.find(x=> x.name.trim().toLowerCase() === it.name.toLowerCase());
+      if(!c){
+        c = {id:uid('cat'), name:it.name, color:PALETTE[state.categories.length % PALETTE.length], flexible: it.flex === null ? false : it.flex};
+        state.categories.push(c); created++;
+      } else if(it.flex !== null){ c.flexible = it.flex; }
+      c.budget = it.budget; set++;
+    });
+    plan.result = {set, created};
   }
   saveState();
   renderAll();
@@ -3273,26 +3652,29 @@ function handleCsvFile(file){
   readCsvText(file, (text)=>{
     try{
       const rows = parseCSV(text, detectDelimiter(text));
-      const found = locateCsvTable(rows);
-      if(!found){ toast('Ce fichier CSV semble vide ou illisible.', 'err'); return; }
-      openCsvWizard(rows, found);
+      const tables = locateCsvTables(rows);
+      if(!tables.length){ toast('Ce fichier CSV semble vide ou illisible.', 'err'); return; }
+      openCsvWizard(rows, tables);
     }catch(e){
       console.error(e);
       toast("Impossible d'analyser ce fichier CSV.", 'err');
     }
   }, ()=> toast('Échec de la lecture du fichier.', 'err'));
 }
-function openCsvWizard(rows, found){
+function openCsvWizard(rows, tables){
   const old = document.getElementById('csvOverlay');
   if(old) old.remove();
-  const headers = rows[found.headerIdx].map(h=> String(h||'').trim());
-  const wz = {type:found.type, map:guessMapping(found.type, headers), skipDup:true, flip:false, done:false};
+  let found = tables[bestTableIndex(tables)];
+  let headers = rows[found.headerIdx].map(h=> String(h||'').trim());
+  const wz = {type:found.type, map:guessMapping(found.type, headers), skipDup:true, flip:false, createCats:true, done:false};
   // bank statements list expenses as negative numbers : suggest flipping the sign when most amounts are negative
-  const probe = guessMapping('expenses', headers);
-  if(wz.type === 'expenses' && probe.amount >= 0){
+  function autoFlip(){
+    const probe = guessMapping('expenses', headers);
+    if(found.type !== 'expenses' || probe.amount < 0) return false;
     const vals = found.data.map(r=> parseAmount(r[probe.amount])).filter(v=> !isNaN(v));
-    if(vals.length >= 3 && vals.filter(v=> v < 0).length / vals.length > 0.8) wz.flip = true;
+    return vals.length >= 3 && vals.filter(v=> v < 0).length / vals.length > 0.8;
   }
+  wz.flip = autoFlip();
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'csvOverlay';
@@ -3300,12 +3682,17 @@ function openCsvWizard(rows, found){
     <button class="modal-close" id="csvModalClose" type="button">&times;</button>
     <h3>Importer un fichier CSV</h3>
     <p class="hint" id="csvInfo"></p>
-    <label for="csvType">Que contient ce fichier ?</label>
+    <div id="csvTableRow" style="display:none;">
+      <label for="csvTable">Tableau à importer</label>
+      <select id="csvTable">${tables.map((t,i)=> `<option value="${i}">Ligne ${t.headerIdx+1} · ${IMPORT_SPECS[t.type].label} · ${t.data.length} lignes</option>`).join('')}</select>
+    </div>
+    <label for="csvType">Que contient ce tableau ?</label>
     <select id="csvType">${Object.keys(IMPORT_SPECS).map(k=> `<option value="${k}">${IMPORT_SPECS[k].label}</option>`).join('')}</select>
     <h2 class="section-title" style="margin-top:16px;">Colonnes<span class="rule"></span></h2>
     <div id="csvMap"></div>
-    <label id="csvFlipRow" style="display:none; margin-top:12px; align-items:flex-start; gap:8px; font-size:0.82rem; color:var(--ink);"><input type="checkbox" id="csvFlip" style="margin-top:3px;"><span>Inverser le signe des montants (relevé bancaire où les dépenses sont négatives)</span></label>
-    <label style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:0.82rem; color:var(--ink);"><input type="checkbox" id="csvSkipDup" checked style="margin-top:3px;"><span>Ignorer les lignes déjà présentes (évite les doublons si tu réimportes le même fichier)</span></label>
+    <label id="csvFlipRow" class="chk" style="display:none;"><input type="checkbox" id="csvFlip"><span>Inverser le signe des montants (relevé bancaire où les dépenses sont négatives)</span></label>
+    <label id="csvCreateRow" class="chk" style="display:none;"><input type="checkbox" id="csvCreate" checked><span>Créer les catégories qui n'existent pas encore (elles seront « fixes » par défaut)</span></label>
+    <label class="chk"><input type="checkbox" id="csvSkipDup" checked><span>Ignorer les lignes déjà présentes (évite les doublons si tu réimportes le même fichier)</span></label>
     <h2 class="section-title" style="margin-top:18px;">Aperçu<span class="rule"></span></h2>
     <div class="scroll-x"><table class="data" id="csvPreviewTable"></table></div>
     <div id="csvImportSummary" class="banner" style="display:none;"></div>
@@ -3317,28 +3704,32 @@ function openCsvWizard(rows, found){
   document.body.appendChild(overlay);
   const g = id=> document.getElementById(id);
   const colOptions = sel => headers.map((h,i)=> `<option value="${i}" ${i===sel?'selected':''}>${escapeHtml(h || ('Colonne '+(i+1)))}</option>`).join('') + `<option value="-1" ${sel===-1?'selected':''}>— Aucune —</option>`;
+  const planOpts = ()=> ({skipDup:wz.skipDup, flip:wz.flip, createCats:wz.createCats});
 
   function missingRequired(){ return IMPORT_SPECS[wz.type].fields.filter(f=> f.req && !(wz.map[f.k] >= 0)); }
   function renderPreview(){
     const spec = IMPORT_SPECS[wz.type];
-    const plan = buildImportPlan(wz.type, wz.map, found.data, {skipDup:wz.skipDup, flip:wz.flip});
+    const plan = buildImportPlan(wz.type, wz.map, found.data, planOpts());
     const miss = missingRequired();
     g('csvInfo').textContent = (found.headerIdx > 0 ? 'Tableau trouvé à la ligne ' + (found.headerIdx+1) + ' du fichier. ' : '')
-      + found.data.length + ' ligne' + (found.data.length>1?'s':'') + ' de données : ' + plan.items.length + ' à importer, '
-      + plan.dup + ' déjà présente' + (plan.dup>1?'s':'') + ', ' + plan.bad + ' illisible' + (plan.bad>1?'s':'') + '.';
+      + plan.total + ' ligne' + (plan.total>1?'s':'') + ' de données : ' + plan.items.length + ' à importer, '
+      + plan.dup + ' déjà présente' + (plan.dup>1?'s':'') + ', ' + plan.bad + ' illisible' + (plan.bad>1?'s':'')
+      + (plan.missing ? ', ' + plan.missing + ' catégorie' + (plan.missing>1?'s':'') + ' inconnue' + (plan.missing>1?'s':'') + ' ignorée' + (plan.missing>1?'s':'') : '')
+      + (plan.zero ? ', ' + plan.zero + ' budget' + (plan.zero>1?'s':'') + ' à 0 € ignoré' + (plan.zero>1?'s':'') : '') + '.';
     let html = '<tr>' + spec.fields.map(f=> '<th>'+escapeHtml(f.label.replace(/ \(.*\)/, ''))+'</th>').join('') + '</tr>';
     found.data.slice(0, 6).forEach(r=>{
       html += '<tr>' + spec.fields.map(f=>{
         const raw = wz.map[f.k] >= 0 ? (r[wz.map[f.k]] || '') : '';
         let v = raw;
         if(f.k === 'date'){ v = raw === '' ? '' : (parseFlexibleDate(raw) || '?'); }
-        else if(f.k === 'amount' || f.k === 'refund'){ const a = parseAmount(raw); v = raw === '' ? '' : (isNaN(a) ? '?' : fmtEUR(f.k === 'amount' && wz.flip ? -a : a)); }
+        else if(f.k === 'amount' || f.k === 'refund' || f.k === 'budget'){ const a = parseAmount(raw); v = raw === '' ? '' : (isNaN(a) ? '?' : fmtEUR(f.k === 'amount' && wz.flip ? -a : a)); }
         return '<td>'+escapeHtml(v)+'</td>';
       }).join('') + '</tr>';
     });
     g('csvPreviewTable').innerHTML = html;
     g('csvConfirmImport').disabled = wz.done || miss.length > 0 || plan.items.length === 0;
     g('csvFlipRow').style.display = wz.type === 'expenses' ? 'flex' : 'none';
+    g('csvCreateRow').style.display = wz.type === 'budgets' ? 'flex' : 'none';
     return plan;
   }
   function renderMap(){
@@ -3349,9 +3740,20 @@ function openCsvWizard(rows, found){
     g('csvFlip').checked = wz.flip;
     renderPreview();
   }
+  if(tables.length > 1){
+    g('csvTableRow').style.display = 'block';
+    g('csvTable').value = String(bestTableIndex(tables));
+    g('csvTable').addEventListener('change', ()=>{
+      found = tables[parseInt(g('csvTable').value, 10)];
+      headers = rows[found.headerIdx].map(h=> String(h||'').trim());
+      wz.type = found.type; wz.map = guessMapping(wz.type, headers); wz.flip = autoFlip();
+      renderMap();
+    });
+  }
   g('csvType').addEventListener('change', ()=>{ wz.type = g('csvType').value; wz.map = guessMapping(wz.type, headers); renderMap(); });
   g('csvSkipDup').addEventListener('change', ()=>{ wz.skipDup = g('csvSkipDup').checked; renderPreview(); });
   g('csvFlip').addEventListener('change', ()=>{ wz.flip = g('csvFlip').checked; renderPreview(); });
+  g('csvCreate').addEventListener('change', ()=>{ wz.createCats = g('csvCreate').checked; renderPreview(); });
   g('csvModalClose').addEventListener('click', ()=> overlay.remove());
   g('csvCancelImport').addEventListener('click', ()=> overlay.remove());
   overlay.addEventListener('click', (ev)=>{ if(ev.target === overlay) overlay.remove(); });
@@ -3359,30 +3761,26 @@ function openCsvWizard(rows, found){
     if(wz.done) return;
     const miss = missingRequired();
     if(miss.length){ toast('Associe la colonne « ' + miss[0].label + ' ».', 'err'); return; }
-    const plan = buildImportPlan(wz.type, wz.map, found.data, {skipDup:wz.skipDup, flip:wz.flip});
+    const plan = buildImportPlan(wz.type, wz.map, found.data, planOpts());
     executeImport(wz.type, plan);
     wz.done = true;
     const sum = g('csvImportSummary');
     sum.style.display = 'block';
-    sum.textContent = plan.items.length + ' ligne' + (plan.items.length>1?'s':'') + ' importée' + (plan.items.length>1?'s':'')
+    const n = plan.items.length;
+    sum.textContent = (wz.type === 'budgets' && plan.result
+        ? plan.result.set + ' budget' + (plan.result.set>1?'s':'') + ' défini' + (plan.result.set>1?'s':'') + (plan.result.created ? ' (' + plan.result.created + ' catégorie' + (plan.result.created>1?'s':'') + ' créée' + (plan.result.created>1?'s':'') + ')' : '')
+        : n + ' ligne' + (n>1?'s':'') + ' importée' + (n>1?'s':''))
       + (plan.dup ? ', ' + plan.dup + ' doublon' + (plan.dup>1?'s':'') + ' ignoré' + (plan.dup>1?'s':'') : '')
       + (plan.bad ? ', ' + plan.bad + ' ligne' + (plan.bad>1?'s':'') + ' illisible' + (plan.bad>1?'s':'') + ' ignorée' + (plan.bad>1?'s':'') : '') + '.';
     g('csvConfirmImport').disabled = true;
     g('csvCancelImport').textContent = 'Fermer';
-    toast(plan.items.length + ' ligne(s) importée(s).', 'ok');
+    toast(n + ' ligne(s) importée(s).', 'ok');
   });
   renderMap();
 }
 
+
 /* ============================= INIT ============================= */
-function renderAll(){
-  populateCategorySelects();
-  renderDashboard();
-  renderExpensesTab();
-  renderIncomesTab();
-  renderCategoriesTab();
-  if(currentTab==='sim') renderSimulator();
-}
 
 async function init(){
   setupNav();
@@ -3423,8 +3821,10 @@ async function init(){
   }
   window.addEventListener('resize', fitKpiValues);
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(fitKpiValues);   // web fonts change the width of the figures
-  switchTab('dashboard');
-  renderAll();
+  saveState();                                  // persists the automatic migrations (revenues, defaults)
+  populateCategorySelects();
+  rebuildDescList();
+  switchTab('week');
 }
 
 document.addEventListener('DOMContentLoaded', init);
