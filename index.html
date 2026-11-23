@@ -543,7 +543,7 @@
   <!-- INCOMES -->
   <section class="tab-panel" id="tab-incomes" data-tab="incomes">
     <h2 class="section-title">Nouveau revenu<span class="rule"></span></h2>
-    <p class="hint">Encode chaque somme reçue, le jour où tu la reçois : salaire, prime, remboursement, allocation… Elle compte une seule fois, dans le mois de sa date. Pour un salaire, coche « versement de salaire » : il alimente automatiquement le contrôle ci-dessous.</p>
+    <p class="hint">Encode chaque somme reçue, le jour où tu la reçois : salaire, prime, remboursement, allocation… Elle compte une seule fois, dans le mois de sa date. Coche « versement de salaire » pour ton salaire, ou « autre activité » pour un salaire d'indépendant. Sinon, choisis la nature : prime, remboursement du SPF Finances ou autre.</p>
     <div class="card">
       <label for="incDate">Date de réception</label>
       <input type="date" id="incDate">
@@ -551,11 +551,15 @@
       <input type="text" id="incLabel" list="incLabelList" autocomplete="off" placeholder="Ex. Salaire, prime, remboursement…">
       <label for="incAmount">Montant (€)</label>
       <input type="number" id="incAmount" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
-      <label class="chk" for="incSalary"><input type="checkbox" id="incSalary"><span>Versement de salaire (contrôlé chaque mois)</span></label>
-      <div id="incSalMonthWrap" style="display:none;">
-        <label for="incSalMonth">Salaire du mois de</label>
-        <input type="month" id="incSalMonth">
-        <p class="hint" id="incSalMonthHint" style="margin:8px 0 0;"></p>
+      <label class="chk" for="incSalary"><input type="checkbox" id="incSalary"><span>Versement de salaire</span></label>
+      <label class="chk" for="incActivity"><input type="checkbox" id="incActivity"><span>Salaire d'une autre activité (indépendant)</span></label>
+      <div id="incKindWrap">
+        <label for="incKind">Nature du revenu (si ce n'est pas un salaire)</label>
+        <select id="incKind">
+          <option value="prime">Prime (ex. CWaPE)</option>
+          <option value="spf">Remboursement SPF Finances</option>
+          <option value="other">Autre</option>
+        </select>
       </div>
       <p class="hint" id="incLegacyHint" style="display:none; margin:10px 0 0;"></p>
       <div class="btn-row">
@@ -563,33 +567,6 @@
         <button class="btn secondary" id="incCancelEdit" type="button" style="display:none;">Annuler</button>
       </div>
     </div>
-
-    <details class="card" id="salaryDetails" style="margin-top:12px;">
-      <summary id="salaryLine">Contrôle du salaire</summary>
-      <p class="hint" style="margin:0 0 10px;">Les deux versements d'un même salaire sont regroupés et comparés au salaire attendu, avec une tolérance.</p>
-      <div id="salarySummary"></div>
-      <div id="salaryMonths"></div>
-      <details class="card" id="salSettings" style="margin-top:10px;">
-        <summary>Salaire attendu, tolérance et rattachement des versements</summary>
-        <div class="form-row">
-          <div><label for="salExpAmount">Salaire net attendu (€ / mois)</label><input type="number" id="salExpAmount" inputmode="decimal" step="0.01" min="0" placeholder="Ex. 2450"></div>
-          <div><label for="salExpFrom">À partir du mois</label><input type="month" id="salExpFrom"></div>
-        </div>
-        <p class="hint" style="margin:8px 0 0;">Somme des deux versements que tu dois normalement recevoir. Si ton salaire change, ajoute un nouveau montant avec son mois de départ : les mois passés gardent l'ancien.</p>
-        <button class="btn" id="salExpSave" type="button">Enregistrer ce montant</button>
-        <div id="salRulesList"></div>
-        <div class="form-row" style="margin-top:16px;">
-          <div><label for="salTol">Tolérance normale (± €)</label><input type="number" id="salTol" inputmode="decimal" step="1" min="0"></div>
-          <div><label for="salAlert">Seuil d'alerte (± €)</label><input type="number" id="salAlert" inputmode="decimal" step="1" min="0"></div>
-        </div>
-        <label for="salMonthRule">À quel mois appartient un salaire versé en deux fois ?</label>
-        <select id="salMonthRule">
-          <option value="first">Au mois du 1er versement (fin de mois) : 28 sept. + 3 oct. = septembre</option>
-          <option value="second">Au mois du 2ᵉ versement (début de mois) : 28 sept. + 3 oct. = octobre</option>
-        </select>
-        <button class="btn secondary" id="salSaveParams" type="button">Enregistrer les réglages</button>
-      </details>
-    </details>
 
     <h2 class="section-title">Revenus encodés<span class="rule"></span></h2>
     <div class="card" style="padding-bottom:12px;">
@@ -830,6 +807,16 @@ function pendingRefunds(){ return state.expenses.filter(e=> e.refund && e.refund
 // ---- v2 : weekly control, budgets, exceptional purchases ---------------------------------------
 // category.budget = annual budget (€) · expense.exceptional = one-off purchase left out of the weekly control
 // income.salary = receipt that is a salary payment (feeds « Contrôle du salaire ») · income.salaryMonth = manual salary month
+// Nature of a revenue : salary (flag), or kind = 'prime' | 'spf' | 'other'
+const INCOME_KINDS = {salary:'Salaire', activity:'Salaire autre activité', spf:'Remboursement SPF Finances', prime:'Prime', other:'Autre'};
+function guessIncomeKind(label){
+  const l = String(label||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+  if(/spf|financ|impot|fisc|precompte|taxe/.test(l)) return 'spf';
+  if(/independ|activite|freelance|facture/.test(l)) return 'activity';
+  if(/prime|cwape?\b|cwap/.test(l)) return 'prime';
+  return 'other';
+}
+function incomeKind(i){ return i.salary ? 'salary' : (['spf','prime','activity'].indexOf(i.kind) !== -1 ? i.kind : 'other'); }
 function isExceptional(e){ return !!e.exceptional && e.amount >= 0; }
 function categoryBudget(c){ return (c && c.budget > 0) ? c.budget : 0; }
 function median(arr){
@@ -855,6 +842,8 @@ function normalizeV2State(st){
     });
     st.salaryPayments = [];
   }
+  // nature of non-salary revenues (prime / SPF Finances refund / other), guessed from the source name once
+  (st.incomes||[]).forEach(i=>{ if(!i.salary && !i.kind) i.kind = guessIncomeKind(i.label); });
   return st;
 }
 function incomeAnnual(inc){ return inc.frequency==='monthly' ? inc.amount*12 : inc.amount; }
@@ -1015,31 +1004,6 @@ function exportBudgetsCSV(){
   });
   if(rows.length === 1){ toast("Aucun budget à exporter : fixes-en dans l'onglet Budget.", 'err'); return; }
   offerDownload('budgets.csv', buildCsv(rows));
-}
-
-/* ============================= SALARY CONTROL (fed by the revenues flagged « salary ») ============================= */
-function salaryPaymentsView(){
-  return state.incomes.filter(i=> i.salary && i.date).map(i=> ({id:i.id, date:i.date, amount:i.amount, label:i.label, monthManual:i.salaryMonth || null}));
-}
-function renderSalaryPane(){
-  renderSalaryMonths();
-  const line = document.getElementById('salaryLine');
-  if(!line) return;
-  const months = salaryMonthsData();
-  const badge = {ok:'✓ Conforme', warn:'⚠ À surveiller', bad:'❌ À vérifier', pending:'⏳ En attente'};
-  let txt = 'Contrôle du salaire';
-  if(!months.length) txt += ' · aucun salaire encodé';
-  else if(state.settings.salary.rules.length === 0) txt += ' · à configurer';
-  else {
-    const last = months.slice().reverse().find(m=> badge[m.status.code]);
-    if(last) txt += ' · ' + monthLabelFR(last.key).toLowerCase() + ' : ' + badge[last.status.code];
-  }
-  line.textContent = txt;
-}
-function setupSalary(){
-  document.getElementById('salExpSave').addEventListener('click', saveSalaryRule);
-  document.getElementById('salSaveParams').addEventListener('click', saveSalaryParams);
-  fillSalarySettings();
 }
 
 /* ============================= CATEGORY SELECTS ============================= */
@@ -1584,7 +1548,6 @@ function openQuickAdd(){
 /* ============================= INCOMES ============================= */
 /* ============================= INCOMES (single place, with a salary flag) ============================= */
 let lastIncomeId = null;
-let incSalMonthTouched = false;
 function setIncomeLegacyHint(i){
   const el = document.getElementById('incLegacyHint');
   if(!i){ el.style.display = 'none'; el.textContent = ''; return; }
@@ -1593,12 +1556,8 @@ function setIncomeLegacyHint(i){
     + ". Choisis une date de réception : elle deviendra un revenu reçu une seule fois, du montant indiqué ci-dessus.";
 }
 function updateIncSalaryUi(){
-  const on = document.getElementById('incSalary').checked;
-  document.getElementById('incSalMonthWrap').style.display = on ? 'block' : 'none';
-  if(!on) return;
-  if(!incSalMonthTouched) document.getElementById('incSalMonth').value = salaryRuleMonth(document.getElementById('incDate').value) || '';
-  const m = document.getElementById('incSalMonth').value;
-  document.getElementById('incSalMonthHint').textContent = isYM(m) ? 'Ce versement compte pour le salaire de ' + monthLabelFR(m).toLowerCase() + '.' : '';
+  const on = document.getElementById('incSalary').checked || document.getElementById('incActivity').checked;
+  document.getElementById('incKindWrap').style.display = on ? 'none' : 'block';
 }
 function setupIncomesForm(){
   document.getElementById('incDate').value = todayISO();
@@ -1610,11 +1569,11 @@ function setupIncomesForm(){
   document.getElementById('incSearch').addEventListener('input', renderIncomesList);
   document.getElementById('incSalOnly').addEventListener('change', renderIncomesList);
   document.getElementById('incSearchClear').addEventListener('click', ()=>{ document.getElementById('incSearch').value = ''; renderIncomesList(); document.getElementById('incSearch').focus(); });
-  document.getElementById('incSalary').addEventListener('change', updateIncSalaryUi);
-  document.getElementById('incDate').addEventListener('change', updateIncSalaryUi);
-  document.getElementById('incSalMonth').addEventListener('change', ()=>{ incSalMonthTouched = true; updateIncSalaryUi(); });
+  document.getElementById('incSalary').addEventListener('change', ()=>{ if(document.getElementById('incSalary').checked) document.getElementById('incActivity').checked = false; updateIncSalaryUi(); });
+  document.getElementById('incActivity').addEventListener('change', ()=>{ if(document.getElementById('incActivity').checked) document.getElementById('incSalary').checked = false; updateIncSalaryUi(); });
   document.getElementById('incLabel').addEventListener('input', ()=>{   // a source already used for a salary → tick the box
     if(editingIncomeId) return;
+    if(!document.getElementById('incSalary').checked){ const g = guessIncomeKind(document.getElementById('incLabel').value); if(g === 'prime' || g === 'spf') document.getElementById('incKind').value = g; }
     const v = document.getElementById('incLabel').value.trim().toLowerCase();
     if(v && state.incomes.some(i=> i.salary && String(i.label).trim().toLowerCase() === v)){
       document.getElementById('incSalary').checked = true;
@@ -1627,8 +1586,8 @@ function resetIncomeForm(){
   document.getElementById('incLabel').value = '';
   document.getElementById('incAmount').value = '';
   document.getElementById('incSalary').checked = false;
-  document.getElementById('incSalMonth').value = '';
-  incSalMonthTouched = false;
+  document.getElementById('incKind').value = 'prime';
+  document.getElementById('incActivity').checked = false;
   updateIncSalaryUi();
   setIncomeLegacyHint(null);
   document.getElementById('incSubmit').textContent = 'Ajouter le revenu';
@@ -1639,33 +1598,28 @@ function submitIncome(){
   const label = document.getElementById('incLabel').value.trim();
   const amount = parseFloat(document.getElementById('incAmount').value);
   const isSalary = document.getElementById('incSalary').checked;
+  const isActivity = !isSalary && document.getElementById('incActivity').checked;
+  const kind = isActivity ? 'activity' : document.getElementById('incKind').value;
   if(!isValidISO(dateVal)){ toast('Indique la date de réception.', 'err'); return; }
   if(!label){ toast('Indique une source de revenu.', 'err'); return; }
   if(isNaN(amount) || amount<=0){ toast('Indique un montant valide.', 'err'); return; }
-  let salaryMonth = null;
-  if(isSalary){
-    const m = document.getElementById('incSalMonth').value;
-    if(m && !isYM(m)){ toast('Mois du salaire invalide (format AAAA-MM).', 'err'); return; }
-    salaryMonth = (m && m !== salaryRuleMonth(dateVal)) ? m : null;
-  }
   const year = parseInt(dateVal.slice(0,4),10);
   if(editingIncomeId){
     const i = state.incomes.find(x=>x.id===editingIncomeId);
     if(i){
       i.year=year; i.frequency='once'; i.label=label; i.amount=amount; i.date=dateVal;
-      if(isSalary){ i.salary = true; i.salaryMonth = salaryMonth; } else { delete i.salary; delete i.salaryMonth; }
+      if(isSalary){ i.salary = true; delete i.kind; } else { delete i.salary; i.kind = kind; }
       lastIncomeId = i.id;
     }
     toast('Revenu mis à jour.', 'ok');
     editingIncomeId = null;
   } else {
     const inc = {id:uid('inc'), year, frequency:'once', label, amount, date:dateVal, createdAt:Date.now()};
-    if(isSalary){ inc.salary = true; inc.salaryMonth = salaryMonth; }
+    if(isSalary) inc.salary = true; else inc.kind = kind;
     state.incomes.push(inc);
     lastIncomeId = inc.id;
     toast('Revenu ajouté.', 'ok');
   }
-  if(isSalary) state.settings.salary.employer = label;
   saveState();
   resetIncomeForm();
   document.getElementById('incSearch').value = '';
@@ -1681,8 +1635,8 @@ function editIncome(id){
   document.getElementById('incLabel').value = i.label;
   document.getElementById('incAmount').value = i.amount;
   document.getElementById('incSalary').checked = !!i.salary;
-  incSalMonthTouched = !!i.salaryMonth;
-  document.getElementById('incSalMonth').value = i.salary ? (salaryMonthOf({date:i.date, monthManual:i.salaryMonth}) || '') : '';
+  document.getElementById('incActivity').checked = incomeKind(i) === 'activity';
+  document.getElementById('incKind').value = (i.salary || incomeKind(i) === 'activity') ? 'prime' : incomeKind(i);
   updateIncSalaryUi();
   setIncomeLegacyHint(i.date ? null : i);
   document.getElementById('incSubmit').textContent = 'Mettre à jour';
@@ -1704,7 +1658,7 @@ function deleteIncomeConfirm(id, btn){
 function incomeSortKey(i){ return i.date ? i.date : (i.year + '-00-00'); }   // undated budget lines come after dated receipts of the same year
 function incomeRowHtml(i, dated){
   const meta = dated
-    ? 'Reçu le ' + fmtDateFR(i.date) + (i.salary ? ' · <span class="cr-tag">salaire</span>' : '')
+    ? 'Reçu le ' + fmtDateFR(i.date) + (i.salary ? ' · <span class="cr-tag">salaire</span>' : (incomeKind(i)==='other' ? '' : ' · <span class="exc-tag">' + INCOME_KINDS[incomeKind(i)].toLowerCase() + '</span>'))
     : i.year + ' · ' + (i.frequency==='monthly' ? fmtEUR(i.amount)+' / mois (×12)' : 'montant annuel');
   return `<div class="list-item${i.id===lastIncomeId?' just-added':''}" data-inc="${i.id}">
       <div class="dot" style="background:var(--gain)"></div>
@@ -1718,7 +1672,7 @@ function incomeRowHtml(i, dated){
       </div>
     </div>`;
 }
-function renderIncomesTab(){ renderIncomesList(); fillSalarySettings(); renderSalaryPane(); }
+function renderIncomesTab(){ renderIncomesList(); }
 
 function wireIncomeButtons(root){
   root.querySelectorAll('button[data-act="edit"]').forEach(b=> b.addEventListener('click', ()=> editIncome(b.dataset.id)));
@@ -1726,7 +1680,7 @@ function wireIncomeButtons(root){
 }
 // Search : every word typed must appear in the source, the amount, the date (numeric or month name), the year or the « salaire » tag. Accents and case are ignored.
 function incomeHaystack(i){
-  let h = [i.label, i.year, i.salary ? 'salaire versement' : '', i.amount.toFixed(2), String(i.amount).replace('.', ',')];
+  let h = [i.label, i.year, i.salary ? 'salaire versement' : (incomeKind(i)==='spf' ? 'spf finances remboursement impot' : (incomeKind(i)==='prime' ? 'prime' : (incomeKind(i)==='activity' ? 'salaire independant activite' : ''))), i.amount.toFixed(2), String(i.amount).replace('.', ',')];
   if(i.date){ h.push(i.date, fmtDateFR(i.date), i.date.slice(8,10)+'/'+i.date.slice(5,7)+'/'+i.date.slice(0,4), monthLabelFR(i.date.slice(0,7))); }
   else h.push(i.frequency === 'monthly' ? 'mensuel' : 'annuel', 'ancienne ligne budget');
   return normKey(h.join(' '));
@@ -1798,213 +1752,6 @@ function monthLabelFR(key){
   const p = key.split('-').map(Number);
   const s = new Date(Date.UTC(p[0], p[1]-1, 1)).toLocaleDateString('fr-BE', {month:'long', year:'numeric', timeZone:'UTC'});
   return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-// Which salary month does a payment date belong to?
-//  "first"  : the salary carries the month of its 1st payment (end of month).  28 sept. + 3 oct. = septembre
-//  "second" : the salary carries the month of its 2nd payment (start of month). 28 sept. + 3 oct. = octobre
-function salaryRuleMonth(dateISO){
-  if(!isValidISO(dateISO)) return null;
-  const key = dateISO.slice(0,7);
-  const late = parseInt(dateISO.slice(8,10),10) >= 16;
-  if(state.settings.salary.monthRule === 'second') return late ? addMonthsKey(key,1) : key;
-  return late ? key : addMonthsKey(key,-1);
-}
-function salaryMonthOf(p){
-  return isYM(p.monthManual) ? p.monthManual : salaryRuleMonth(p.date);
-}
-function salaryExpectedFor(key){
-  let amt = null;
-  state.settings.salary.rules.slice().sort((a,b)=> a.from.localeCompare(b.from)).forEach(r=>{ if(r.from <= key) amt = r.amount; });
-  return amt;
-}
-// A salary month is "open" until the 12th of the month in which its last payment is due.
-function salaryCloseISO(key){
-  const closeMonth = state.settings.salary.monthRule === 'second' ? key : addMonthsKey(key,1);
-  return closeMonth + '-12';
-}
-function salaryMonthStatus(key, received, expected){
-  const cfg = state.settings.salary;
-  const closed = todayISO() > salaryCloseISO(key);
-  if(expected === null) return {code:'noexp', diff:null, closed};
-  const diff = Math.round((received - expected)*100)/100;
-  if(!closed && diff < -cfg.tolerance) return {code:'pending', diff, closed};
-  const a = Math.abs(diff);
-  if(a <= cfg.tolerance) return {code:'ok', diff, closed};
-  if(a <= cfg.alert) return {code:'warn', diff, closed};
-  return {code:'bad', diff, closed};
-}
-function salaryMonthsData(){
-  const byMonth = {};
-  salaryPaymentsView().forEach(p=>{
-    const m = salaryMonthOf(p);
-    if(m) (byMonth[m] = byMonth[m] || []).push(p);
-  });
-  const keys = Object.keys(byMonth).sort();
-  if(keys.length === 0) return [];
-  const todayMonth = salaryRuleMonth(todayISO());
-  let last = keys[keys.length-1];
-  if(todayMonth && todayMonth > last) last = todayMonth;
-  const out = [];
-  let k = keys[0], guard = 0;
-  while(k <= last && guard++ < 240){
-    const pays = (byMonth[k] || []).slice().sort((a,b)=> a.date.localeCompare(b.date));
-    const received = Math.round(pays.reduce((s,p)=> s+p.amount, 0)*100)/100;
-    const expected = salaryExpectedFor(k);
-    const status = salaryMonthStatus(k, received, expected);
-    out.push({key:k, pays, received, expected, status, closed:status.closed});
-    k = addMonthsKey(k,1);
-  }
-  return out;
-}
-
-function salaryGaugeHtml(diff){
-  const cfg = state.settings.salary;
-  const S = Math.max(cfg.alert*1.5, 1);
-  const tolP = Math.min(cfg.tolerance/S*50, 50);
-  const alP = Math.min(cfg.alert/S*50, 50);
-  const pos = Math.max(2, Math.min(98, 50 + diff/S*50));
-  return `<div class="sal-gauge" aria-hidden="true">
-    <div class="sal-zone bad" style="left:0; width:100%;"></div>
-    <div class="sal-zone warn" style="left:${50-alP}%; width:${alP*2}%;"></div>
-    <div class="sal-zone ok" style="left:${50-tolP}%; width:${tolP*2}%;"></div>
-    <div class="sal-mid"></div>
-    <div class="sal-marker" style="left:${pos}%;"></div>
-  </div>`;
-}
-
-function salaryMonthCardHtml(m){
-  const st = m.status;
-  const badge = {ok:"✓ Conforme", warn:"⚠ À surveiller", bad:"❌ À vérifier", pending:"⏳ En attente", noexp:"Attendu non défini"}[st.code];
-  let detail = '';
-  if(st.code === 'noexp'){
-    detail = `<p class="hint" style="margin:6px 0 0;">Définis ton salaire attendu (Réglages du contrôle) pour comparer ce mois.</p>`;
-  } else if(st.code === 'pending'){
-    detail = `<div class="sal-diff">Il reste encore <strong>${fmtEUR(-st.diff)}</strong> à recevoir (dernier versement attendu avant le ${fmtDateFR(salaryCloseISO(m.key))}).</div>`;
-  } else if(m.pays.length === 0){
-    detail = `<div class="sal-diff loss">Aucun versement enregistré pour ce mois.</div>`;
-  } else {
-    const txt = Math.abs(st.diff) < 0.005 ? 'Montant exact' : `Écart : <strong>${fmtEURSigned(st.diff)}</strong> (${st.diff<0?'moins':'plus'} que prévu)`;
-    detail = `<div class="sal-diff ${st.code}">${txt}</div>`;
-  }
-  const gauge = (st.diff !== null && st.code !== 'noexp') ? salaryGaugeHtml(st.diff) : '';
-  const pays = m.pays.map(p=>`<div class="sal-pay">
-      <span class="sal-pay-date">${fmtDateFR(p.date)}</span>
-      <span class="sal-pay-label">${escapeHtml(p.label||'')}${p.monthManual?' <em title="Rattaché manuellement à ce mois">✎</em>':''}</span>
-      <span class="sal-pay-amt">${fmtEUR(p.amount)}</span>
-      <span class="sal-pay-act"><button data-sal="edit" data-id="${p.id}">Modifier</button><button data-sal="del" data-id="${p.id}">Suppr.</button></span>
-    </div>`).join('');
-  return `<div class="sal-card ${st.code}">
-    <div class="sal-head"><strong>${monthLabelFR(m.key)}</strong><span class="sal-badge ${st.code}">${badge}</span></div>
-    <div class="sal-amounts"><span>Reçu <b>${fmtEUR(m.received)}</b></span>${m.expected!==null?`<span>Attendu <b>${fmtEUR(m.expected)}</b></span>`:''}</div>
-    ${detail}${gauge}
-    ${pays || ''}
-  </div>`;
-}
-
-function renderSalarySummary(months){
-  const el = document.getElementById('salarySummary');
-  const cfg = state.settings.salary;
-  if(salaryPaymentsView().length === 0){
-    el.innerHTML = `<div class="card"><div class="empty"><div class="big">Aucun salaire encodé</div>Encode un revenu en cochant « versement de salaire », et indique ton salaire attendu dans les réglages ci-dessous.</div></div>`;
-    return;
-  }
-  if(cfg.rules.length === 0){
-    el.innerHTML = `<div class="banner warn">Pour lancer le contrôle, indique d'abord ton salaire net attendu par mois.<br><button class="btn outline" id="salGoSettings" type="button" style="margin-top:8px;">Définir le salaire attendu</button></div>`;
-    document.getElementById('salGoSettings').onclick = ()=>{
-      const d = document.getElementById('salSettings'); d.open = true; d.scrollIntoView({behavior:'smooth', block:'center'});
-    };
-    return;
-  }
-  const closed = months.filter(m=> m.closed && m.expected !== null);
-  if(closed.length === 0){
-    el.innerHTML = `<div class="card"><p class="hint" style="margin:0;">Le bilan s'affichera dès qu'un mois de salaire sera clôturé (les deux versements sont attendus avant le 12 du mois suivant).</p></div>`;
-    return;
-  }
-  const n = closed.length;
-  const cnt = c => closed.filter(m=> m.status.code === c).length;
-  const diffs = closed.map(m=> m.status.diff);
-  const avg = mean(diffs);
-  const maxAbs = Math.max(...diffs.map(Math.abs));
-  const rec = closed.reduce((s,m)=> s+m.received, 0);
-  const exp = closed.reduce((s,m)=> s+m.expected, 0);
-  el.innerHTML = `<div class="kpi-row three">
-      <div class="kpi"><div class="label">Mois conformes</div><div class="value ${cnt('ok')===n?'gain':''}">${cnt('ok')}/${n}</div></div>
-      <div class="kpi"><div class="label">Écart moyen</div><div class="value ${Math.abs(avg)<=cfg.tolerance?'gain':'loss'}">${fmtEURSigned(Math.round(avg))}</div></div>
-      <div class="kpi"><div class="label">Écart max</div><div class="value">${fmtEUR(Math.round(maxAbs))}</div></div>
-    </div>
-    <p class="hint">Cumul sur ${n} mois clôturé${n>1?'s':''} : <strong>${fmtEUR(rec)}</strong> reçus pour ${fmtEUR(exp)} attendus — écart de ${fmtEURSigned(rec-exp)}. ${cnt('warn')>0?cnt('warn')+' à surveiller, ':''}${cnt('bad')>0?cnt('bad')+' à vérifier. ':''}Conforme = écart ≤ ${fmtEUR(cfg.tolerance)} ; à surveiller = ≤ ${fmtEUR(cfg.alert)}.</p>`;
-  fitKpiValues();
-}
-
-function renderSalaryRules(){
-  const el = document.getElementById('salRulesList');
-  const rules = state.settings.salary.rules.slice().sort((a,b)=> a.from.localeCompare(b.from));
-  if(rules.length === 0){ el.innerHTML = ''; return; }
-  el.innerHTML = `<div style="margin-top:12px;">` + rules.map(r=>`<div class="list-item">
-      <div class="dot" style="background:var(--gain)"></div>
-      <div class="body"><div class="row1"><span class="desc">${fmtEUR(r.amount)} / mois</span><span class="meta">depuis ${monthLabelFR(r.from).toLowerCase()}</span></div>
-      <div class="actions"><button data-rule="del" data-from="${r.from}">Suppr.</button></div></div>
-    </div>`).join('') + `</div>`;
-  el.querySelectorAll('button[data-rule="del"]').forEach(b=> b.addEventListener('click', ()=>{
-    if(b.dataset.confirming === '1'){
-      state.settings.salary.rules = state.settings.salary.rules.filter(r=> r.from !== b.dataset.from);
-      saveState(); renderSalaryPane(); toast('Montant supprimé.', 'ok');
-    } else {
-      b.dataset.confirming = '1'; b.textContent = 'Confirmer ?'; b.classList.add('confirming');
-      setTimeout(()=>{ if(b.dataset.confirming === '1'){ b.dataset.confirming = '0'; b.textContent = 'Suppr.'; b.classList.remove('confirming'); } }, 2800);
-    }
-  }));
-}
-
-function renderSalaryMonths(){
-  const months = salaryMonthsData();
-  renderSalarySummary(months);
-  renderSalaryRules();
-  const el = document.getElementById('salaryMonths');
-  if(months.length === 0){ el.innerHTML = ''; return; }
-  el.innerHTML = months.slice().reverse().map(salaryMonthCardHtml).join('');
-  el.querySelectorAll('button[data-sal="edit"]').forEach(b=> b.addEventListener('click', ()=> editIncome(b.dataset.id)));
-  el.querySelectorAll('button[data-sal="del"]').forEach(b=> b.addEventListener('click', ()=> deleteIncomeConfirm(b.dataset.id, b)));
-}
-
-
-function fillSalarySettings(){
-  const cfg = state.settings.salary;
-  document.getElementById('salTol').value = cfg.tolerance;
-  document.getElementById('salAlert').value = cfg.alert;
-  document.getElementById('salMonthRule').value = cfg.monthRule;
-  document.getElementById('salExpAmount').value = '';
-  const earliest = salaryPaymentsView().map(salaryMonthOf).filter(Boolean).sort()[0];
-  document.getElementById('salExpFrom').value = earliest || salaryRuleMonth(todayISO()) || '';
-  document.getElementById('salSettings').open = cfg.rules.length === 0;
-}
-function saveSalaryRule(){
-  const amt = parseFloat(document.getElementById('salExpAmount').value);
-  const from = document.getElementById('salExpFrom').value;
-  if(isNaN(amt) || amt <= 0){ toast('Indique le salaire net attendu.', 'err'); return; }
-  if(!isYM(from)){ toast('Indique le mois de départ (AAAA-MM).', 'err'); return; }
-  const rules = state.settings.salary.rules;
-  const ex = rules.find(r=> r.from === from);
-  if(ex) ex.amount = amt; else rules.push({from, amount:amt});
-  rules.sort((a,b)=> a.from.localeCompare(b.from));
-  saveState();
-  document.getElementById('salExpAmount').value = '';
-  document.getElementById('salSettings').open = true;
-  renderSalaryPane();
-  toast('Salaire attendu enregistré.', 'ok');
-}
-function saveSalaryParams(){
-  const tol = parseFloat(document.getElementById('salTol').value);
-  const al = parseFloat(document.getElementById('salAlert').value);
-  if(isNaN(tol) || tol < 0){ toast('Tolérance invalide.', 'err'); return; }
-  if(isNaN(al) || al < tol){ toast("Le seuil d'alerte doit être supérieur ou égal à la tolérance.", 'err'); return; }
-  const cfg = state.settings.salary;
-  cfg.tolerance = tol; cfg.alert = al;
-  cfg.monthRule = document.getElementById('salMonthRule').value === 'second' ? 'second' : 'first';
-  saveState();
-  renderSalaryPane();
-  toast('Réglages enregistrés.', 'ok');
 }
 
 /* ============================= CREDIT NOTES (refunds) ============================= */
@@ -2753,6 +2500,26 @@ function openBigPurchasesModal(){
 }
 
 /* ============================= DASHBOARD ============================= */
+let dashKinds = {salary:false, activity:false, spf:false, prime:false, other:false};
+function renderDashIncomeKinds(){
+  const el = document.getElementById('dashIncKinds');
+  if(!el) return;
+  const y = dashDetailYear;
+  const order = ['salary','activity','spf','prime','other'];
+  const labels = {salary:'Salaires', activity:"Salaire d'une autre activité (indépendant)", spf:'Remboursements SPF Finances', prime:'Primes', other:'Autres revenus'};
+  const chosen = order.filter(k=> dashKinds[k]);
+  const picked = state.incomes.filter(i=> i.year === y && dashKinds[incomeKind(i)]);
+  const total = picked.reduce((s,i)=> s + incomeAnnual(i), 0);
+  el.innerHTML = `<h2 class="section-title">Revenus ${y} par nature<span class="rule"></span></h2>
+    <div class="card">
+      ${order.map((k,n)=> `<label class="chk" for="dk_${k}" style="margin-top:${n===0?0:10}px;"><input type="checkbox" id="dk_${k}" data-k="${k}" ${dashKinds[k]?'checked':''}><span>${labels[k]}</span></label>`).join('')}
+      <div class="kpi" style="margin-top:14px;"><div class="label">Revenus ${y}${chosen.length ? ' · ' + chosen.map(k=> labels[k].replace(/ \(.*\)/,'')).join(' + ') : ''}</div>
+        <div class="value gain">${chosen.length ? fmtEUR(total) : '—'}</div></div>
+      ${chosen.length ? '' : '<p class="hint" style="margin:8px 0 0;">Coche une ou plusieurs natures pour afficher leur somme.</p>'}
+    </div>`;
+  el.querySelectorAll('input[data-k]').forEach(cb=> cb.addEventListener('change', ()=>{ dashKinds[cb.dataset.k] = cb.checked; renderDashIncomeKinds(); fitKpiValues(); }));
+  fitKpiValues();
+}
 function renderDashboard(){
   const years = allYearsInData();
   if(state.expenses.length===0 && state.incomes.length===0){
@@ -2780,6 +2547,7 @@ function renderDashboard(){
       <div class="kpi"><div class="label">Dépenses ${dashDetailYear}</div><div class="value loss">${fmtEUR(yearExpenseTotal)}</div></div>
       <div class="kpi wide"><div class="label">Solde ${dashDetailYear}</div><div class="value ${yearNet>=0?'gain':'loss'}">${fmtEURSigned(yearNet)}</div></div>
     </div>
+    <div id="dashIncKinds"></div>
     ${(()=>{ const pend = pendingRefunds(); if(!pend.length) return '';
       const tot = pend.reduce((s,e)=> s + e.refund.amount, 0);
       return `<p class="hint" style="margin:4px 0 6px;">Remboursements attendus, déjà déduits des dépenses : <strong>${fmtEUR(tot)}</strong> (${pend.length} en attente). <button type="button" class="linklike" id="dashPendingBtn">Voir</button></p>`; })()}
@@ -2813,6 +2581,7 @@ function renderDashboard(){
   const pb = document.getElementById('dashPendingBtn');
   if(pb) pb.onclick = showPendingRefunds;
   fitKpiValues();
+  renderDashIncomeKinds();
   renderCategoryYearEvolution(years);
   if(chartsAvailable()){
     drawYearlyChart(years);
@@ -3355,9 +3124,9 @@ function exportExpensesCSV(){
   offerDownload('depenses.csv', buildCsv(rows));
 }
 function exportIncomesCSV(){
-  const rows = [['Année','Date de réception','Source','Fréquence','Montant','Salaire','Mois du salaire']];
+  const rows = [['Année','Date de réception','Source','Fréquence','Montant','Salaire','Nature']];
   state.incomes.slice().sort((a,b)=> incomeSortKey(a).localeCompare(incomeSortKey(b))).forEach(i=>{
-    rows.push([i.year, i.date||'', i.label, i.frequency==='monthly'?'mensuel':(i.frequency==='once'?'une fois':'annuel'), csvNum(i.amount), i.salary ? 'oui' : '', i.salary ? (salaryMonthOf({date:i.date, monthManual:i.salaryMonth}) || '') : '']);
+    rows.push([i.year, i.date||'', i.label, i.frequency==='monthly'?'mensuel':(i.frequency==='once'?'une fois':'annuel'), csvNum(i.amount), i.salary ? 'oui' : '', INCOME_KINDS[incomeKind(i)].toLowerCase()]);
   });
   offerDownload('revenus.csv', buildCsv(rows));
 }
@@ -3410,12 +3179,7 @@ const IMPORT_SPECS = {
     {k:'year',   label:'Année (lignes sans date)', names:['annee','year']},
     {k:'freq',   label:'Fréquence (lignes sans date)', names:['frequence','periodicite']},
     {k:'salflag',label:'Salaire (oui/non)', names:['salaire','versement de salaire']},
-    {k:'month',  label:'Mois du salaire (AAAA-MM)', names:['mois du salaire']} ]},
-  salary:{ label:'Versements de salaire', fields:[
-    {k:'date',   label:'Date du versement', req:true, names:['date du versement','date de reception','date','versement','jour']},
-    {k:'amount', label:'Montant',     req:true, names:['montant','amount','somme','valeur','total']},
-    {k:'desc',   label:'Source',      names:['source','description','libelle','employeur','nom']},
-    {k:'month',  label:'Mois du salaire (AAAA-MM)', names:['mois du salaire','mois']} ]},
+    {k:'kind',   label:'Nature (salaire, prime, SPF Finances…)', names:['nature','type de revenu']} ]},
   budgets:{ label:'Budgets par catégorie', fields:[
     {k:'cat',    label:'Catégorie', req:true, names:['categorie','category','rubrique','nom']},
     {k:'budget', label:'Budget annuel', req:true, names:['budget annuel','budget','montant']},
@@ -3517,7 +3281,6 @@ function detectImportType(headers){
   const has = (...ns)=> ns.some(n=> h.some(x=> x.indexOf(n) !== -1));
   const exact = (...ns)=> ns.some(n=> h.indexOf(n) !== -1);
   if(has('frequence', 'periodicite') || exact('date de reception', 'annee')) return 'incomes';
-  if(has('mois du salaire')) return 'salary';
   if(exact('source')) return 'incomes';
   if(exact('budget', 'budget annuel') && !has('date')) return 'budgets';
   return 'expenses';
@@ -3589,7 +3352,6 @@ function buildImportPlan(type, map, data, opts){
   let existing = {};
   if(type === 'expenses') existing = countMap(state.expenses.map(e=> e.date+'|'+e.description.trim().toLowerCase()+'|'+expensePaid(e).toFixed(2)));
   if(type === 'incomes')  existing = countMap(state.incomes.map(i=> i.date ? 'd|'+i.date+'|'+i.label.trim().toLowerCase()+'|'+i.amount.toFixed(2) : 'l|'+i.year+'|'+i.label.trim().toLowerCase()+'|'+i.amount.toFixed(2)+'|'+i.frequency));
-  if(type === 'salary')   existing = countMap(state.incomes.filter(i=> i.salary && i.date).map(i=> i.date+'|'+i.amount.toFixed(2)+'|'+(i.label||'').trim().toLowerCase()));
   if(type === 'budgets')  existing = countMap(state.categories.filter(c=> c.budget > 0).map(c=> 'b|'+c.name.trim().toLowerCase()+'|'+c.budget.toFixed(2)));
   const take = (key, item)=>{
     if(opts.skipDup && !opts.replace && existing[key] > 0){ existing[key]--; dup++; return; }
@@ -3618,22 +3380,16 @@ function buildImportPlan(type, map, data, opts){
       const label = String(cell(r,'desc')||'').trim() || 'Revenu importé';
       const date = map.date >= 0 ? parseFlexibleDate(cell(r,'date')) : null;
       if(date){
-        const sal = map.salflag >= 0 && truthyCell(cell(r,'salflag'));
-        const mo = String(cell(r,'month')||'').trim();
-        take('d|'+date+'|'+label.toLowerCase()+'|'+amount.toFixed(2), {date, year:parseInt(date.slice(0,4),10), frequency:'once', label, amount, salary:sal, salaryMonth:(sal && isYM(mo)) ? mo : null});
+        const kv = map.kind >= 0 ? normKey(cell(r,'kind')) : '';
+        const sal = (map.salflag >= 0 && truthyCell(cell(r,'salflag'))) || kv === 'salaire';
+        const kind = sal ? null : (/spf|financ/.test(kv) ? 'spf' : (/activit|independ/.test(kv) ? 'activity' : (kv.indexOf('prime') === 0 ? 'prime' : (kv ? 'other' : guessIncomeKind(label)))));
+        take('d|'+date+'|'+label.toLowerCase()+'|'+amount.toFixed(2), {date, year:parseInt(date.slice(0,4),10), frequency:'once', label, amount, salary:sal, kind});
       } else {
         const y = parseInt(cell(r,'year'), 10);
         if(!(y >= 1900 && y <= 2200)){ bad++; return; }
         const frequency = normKey(cell(r,'freq')).indexOf('mens') === 0 ? 'monthly' : 'annual';
         take('l|'+y+'|'+label.toLowerCase()+'|'+amount.toFixed(2)+'|'+frequency, {date:null, year:y, frequency, label, amount});
       }
-    } else if(type === 'salary'){
-      const date = parseFlexibleDate(cell(r,'date'));
-      const amount = parseAmount(cell(r,'amount'));
-      if(!date || isNaN(amount) || amount <= 0){ bad++; return; }
-      const label = String(cell(r,'desc')||'').trim() || state.settings.salary.employer;
-      const month = String(cell(r,'month')||'').trim();
-      take(date+'|'+amount.toFixed(2)+'|'+label.toLowerCase(), {date, amount, label, month: isYM(month) ? month : null});
     } else {
       const name = String(cell(r,'cat')||'').trim();
       const b = parseAmount(cell(r,'budget'));
@@ -3652,14 +3408,12 @@ const UNDO_KEY = 'grandlivre_v1_undo';
 function currentCountFor(type){
   if(type === 'expenses') return state.expenses.length;
   if(type === 'incomes') return state.incomes.length;
-  if(type === 'salary') return state.incomes.filter(i=> i.salary).length;
   return state.categories.filter(c=> c.budget > 0).length;
 }
 function clearForReplace(type){
   const n = currentCountFor(type);
   if(type === 'expenses') state.expenses = [];
   else if(type === 'incomes') state.incomes = [];
-  else if(type === 'salary') state.incomes = state.incomes.filter(i=> !i.salary);
   else state.categories.forEach(c=>{ delete c.budget; });
   return n;
 }
@@ -3710,16 +3464,8 @@ function executeImport(type, plan){
   } else if(type === 'incomes'){
     plan.items.forEach((it, idx)=>{
       const inc = {id:uid('inc'), year:it.year, frequency:it.frequency, label:it.label, amount:it.amount, date:it.date, createdAt:base+idx};
-      if(it.salary){ inc.salary = true; inc.salaryMonth = it.salaryMonth || null; }
+      if(it.salary) inc.salary = true; else inc.kind = it.kind || guessIncomeKind(it.label);
       state.incomes.push(inc);
-    });
-  } else if(type === 'salary'){
-    plan.items.forEach((it, idx)=>{
-      const def = salaryRuleMonth(it.date);
-      const monthManual = (it.month && it.month !== def) ? it.month : null;
-      const same = state.incomes.find(i=> i.date === it.date && Math.abs(i.amount - it.amount) < 0.005 && !i.salary);
-      if(same){ same.salary = true; same.salaryMonth = monthManual; return; }                 // already encoded as a revenue : just flag it
-      state.incomes.push({id:uid('inc'), year:parseInt(it.date.slice(0,4),10), frequency:'once', label:it.label, amount:it.amount, date:it.date, salary:true, salaryMonth:monthManual, createdAt:base+idx});
     });
   } else {
     let set = 0, created = 0;
@@ -3849,7 +3595,7 @@ function openCsvWizard(rows, tables){
     g('csvSkipDup').disabled = wz.replace;
     const warn = g('csvReplaceWarn');
     if(wz.replace){
-      const nOld = currentCountFor(wz.type), what = {expenses:'dépenses', incomes:'revenus', salary:'versements de salaire', budgets:'budgets'}[wz.type];
+      const nOld = currentCountFor(wz.type), what = {expenses:'dépenses', incomes:'revenus', budgets:'budgets'}[wz.type];
       warn.style.display = 'block';
       warn.textContent = plan.items.length === 0
         ? 'Aucune ligne exploitable dans ce fichier : rien ne sera remplacé.'
@@ -3924,7 +3670,6 @@ async function init(){
   setupNav();
   setupExpensesForm();
   setupIncomesForm();
-  setupSalary();
   setupCategoriesForm();
   setupSettings();
   try{
