@@ -419,6 +419,9 @@
   .nat-grid{display:grid; grid-template-columns:1fr 1fr; gap:7px 12px;}
   .nat-grid .chk{margin-top:0; font-size:0.76rem; align-items:center; line-height:1.25;}
   .nat-grid .chk span{min-width:0;}
+  .dash-nat{gap:5px 10px;}
+  .dash-nat .chk{font-size:0.66rem; gap:6px;}
+  .dash-nat .chk input{width:15px; height:15px;}
 </style>
 </head>
 <body>
@@ -558,7 +561,6 @@
       <div class="nat-grid" id="incNatGrid">
         <label class="chk" for="incSalary"><input type="checkbox" id="incSalary"><span>Versement de salaire</span></label>
         <label class="chk" for="incActivity"><input type="checkbox" id="incActivity"><span>Salaire autre activité (indépendant)</span></label>
-        <label class="chk" for="incN_prime"><input type="checkbox" id="incN_prime"><span>Prime</span></label>
         <label class="chk" for="incN_cwape"><input type="checkbox" id="incN_cwape"><span>Prime CWAPE</span></label>
         <label class="chk" for="incN_setca"><input type="checkbox" id="incN_setca"><span>Prime SETCA</span></label>
         <label class="chk" for="incN_spf"><input type="checkbox" id="incN_spf"><span>Remboursement SPF Finances</span></label>
@@ -812,22 +814,21 @@ function pendingRefunds(){ return state.expenses.filter(e=> e.refund && e.refund
 // income.salary = receipt that is a salary payment (feeds « Contrôle du salaire ») · income.salaryMonth = manual salary month
 // Nature of a revenue : salary (flag), or kind = 'prime' | 'spf' | 'other'
 const INCOME_KINDS = {salary:'Salaire', activity:'Salaire autre activité', prime:'Prime', cwape:'Prime CWAPE', setca:'Prime SETCA', spf:'Remboursement SPF Finances', refund:'Remboursement', other:'Autre'};
-const NAT_ORDER = ['salary','activity','prime','cwape','setca','spf','refund'];
-const NAT_ID = {salary:'incSalary', activity:'incActivity', prime:'incN_prime', cwape:'incN_cwape', setca:'incN_setca', spf:'incN_spf', refund:'incN_refund'};
+const NAT_ORDER = ['salary','activity','cwape','setca','spf','refund'];
+const NAT_ID = {salary:'incSalary', activity:'incActivity', cwape:'incN_cwape', setca:'incN_setca', spf:'incN_spf', refund:'incN_refund'};
 function kindFromText(l){
   if(/cwap/.test(l)) return 'cwape';
   if(/setca/.test(l)) return 'setca';
   if(/spf|financ|impot|fisc|precompte|taxe/.test(l)) return 'spf';
   if(/independ|activit|freelance|facture/.test(l)) return 'activity';
   if(/rembours/.test(l)) return 'refund';
-  if(/prime/.test(l)) return 'prime';
   return 'other';
 }
 function guessIncomeKind(label){
   const l = String(label||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
   return kindFromText(l);
 }
-function incomeKind(i){ return i.salary ? 'salary' : (['spf','prime','activity','cwape','setca','refund'].indexOf(i.kind) !== -1 ? i.kind : 'other'); }
+function incomeKind(i){ return i.salary ? 'salary' : (['spf','activity','cwape','setca','refund'].indexOf(i.kind) !== -1 ? i.kind : 'other'); }
 function isExceptional(e){ return !!e.exceptional && e.amount >= 0; }
 function categoryBudget(c){ return (c && c.budget > 0) ? c.budget : 0; }
 function median(arr){
@@ -854,7 +855,7 @@ function normalizeV2State(st){
     st.salaryPayments = [];
   }
   // nature of non-salary revenues (prime / SPF Finances refund / other), guessed from the source name once
-  (st.incomes||[]).forEach(i=>{ if(!i.salary && !i.kind) i.kind = guessIncomeKind(i.label); else if(i.kind === 'prime'){ const g = guessIncomeKind(i.label); if(g === 'cwape' || g === 'setca') i.kind = g; } });
+  (st.incomes||[]).forEach(i=>{ if(!i.salary && !i.kind) i.kind = guessIncomeKind(i.label); else if(i.kind === 'prime'){ i.kind = 'other'; const g = guessIncomeKind(i.label); if(g === 'cwape' || g === 'setca') i.kind = g; } });
   return st;
 }
 function incomeAnnual(inc){ return inc.frequency==='monthly' ? inc.amount*12 : inc.amount; }
@@ -2505,21 +2506,21 @@ function openBigPurchasesModal(){
 }
 
 /* ============================= DASHBOARD ============================= */
-let dashKinds = {salary:false, activity:false, prime:false, cwape:false, setca:false, spf:false, refund:false, other:false};
+let dashKinds = {salary:false, activity:false, cwape:false, setca:false, spf:false, refund:false, other:false};
 function renderDashIncomeKinds(){
   const el = document.getElementById('dashIncKinds');
   if(!el) return;
   const y = dashDetailYear;
-  const order = ['salary','activity','prime','cwape','setca','spf','refund','other'];
-  const labels = {salary:'Salaires', activity:'Autre activité (indépendant)', prime:'Primes', cwape:'Prime CWAPE', setca:'Prime SETCA', spf:'Remboursement SPF Finances', refund:'Remboursements', other:'Autres revenus'};
+  const order = ['salary','activity','cwape','setca','spf','refund','other'];
+  const labels = {salary:'Salaires', activity:'Autre activité (indépendant)', cwape:'Prime CWAPE', setca:'Prime SETCA', spf:'Remboursement SPF Finances', refund:'Remboursements', other:'Autres revenus'};
   const chosen = order.filter(k=> dashKinds[k]);
   const total = state.incomes.filter(i=> i.year === y && dashKinds[incomeKind(i)]).reduce((s,i)=> s + incomeAnnual(i), 0);
   el.innerHTML = `<h2 class="section-title">Revenus ${y} par nature<span class="rule"></span></h2>
-    <div class="card" style="padding:12px 14px;">
-      <div class="nat-grid">${order.map(k=> `<label class="chk" for="dk_${k}"><input type="checkbox" id="dk_${k}" data-k="${k}" ${dashKinds[k]?'checked':''}><span>${labels[k]}</span></label>`).join('')}</div>
+    <div class="card" style="padding:10px 12px;">
+      <div class="nat-grid dash-nat">${order.map(k=> `<label class="chk" for="dk_${k}"><input type="checkbox" id="dk_${k}" data-k="${k}" ${dashKinds[k]?'checked':''}><span>${labels[k]}</span></label>`).join('')}</div>
       <div id="dashIncSum" style="display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-top:10px; padding-top:8px; border-top:1px solid var(--line);">
-        <span style="font-size:0.76rem; color:var(--ink-soft); min-width:0;">Revenus ${y}${chosen.length ? ' · ' + chosen.map(k=> labels[k].replace(/ \(.*\)/,'')).join(' + ') : ' · coche une ou plusieurs natures'}</span>
-        <span style="font-family:var(--font-mono); font-weight:700; font-size:1.05rem; white-space:nowrap; color:var(--gain);">${chosen.length ? fmtEUR(total) : '—'}</span>
+        <span style="font-size:0.66rem; color:var(--ink-soft); min-width:0;">Revenus ${y}${chosen.length ? ' · ' + chosen.map(k=> labels[k].replace(/ \(.*\)/,'')).join(' + ') : ' · coche une ou plusieurs natures'}</span>
+        <span style="font-family:var(--font-mono); font-weight:700; font-size:0.95rem; white-space:nowrap; color:var(--gain);">${chosen.length ? fmtEUR(total) : '—'}</span>
       </div>
     </div>`;
   el.querySelectorAll('input[data-k]').forEach(cb=> cb.addEventListener('change', ()=>{ dashKinds[cb.dataset.k] = cb.checked; renderDashIncomeKinds(); }));
